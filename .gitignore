@@ -1,0 +1,22 @@
+# build artifacts
+build/
+out/
+*.zip
+*.bak
+
+# Rust / cargo-ndk per-target build cache (the actual ABI binaries we ship
+# live in native/*/prebuilt/ and ARE committed)
+native/**/target/
+
+# OS / editor / tooling cruft (machine-specific, not for sharing)
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+.claude/
+
+# scratch / temp
+tmp_*
+*.tmp
+*.log
+.aswebui.apk
