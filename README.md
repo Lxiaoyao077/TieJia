@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="banner.png" alt="AlwaysStrong" width="100%">
+<img src="banner.png" alt="AlwaysStrong" width="700">
 
 <br>
 <br>
@@ -10,7 +10,7 @@
 [![License](https://img.shields.io/badge/license-GPL--3.0-orange)](LICENSE)
 [![Telegram](https://img.shields.io/badge/Telegram-keyboxstrong-26A5E4?logo=telegram&logoColor=white)](https://t.me/keyboxstrong)
 
-<img src="screenshots/webui.jpg" width="44%" alt="WebUI"> &nbsp; <img src="screenshots/languages.jpg" width="44%" alt="Translated into 15 languages">
+<img src="screenshots/webui.jpg" width="330" alt="WebUI"> &nbsp; <img src="screenshots/languages.jpg" width="330" alt="Translated into 15 languages">
 
 <sub>Built-in WebUI on KernelSU / APatch — hourly auto-update toggles, translated into 15 languages.</sub>
 
@@ -105,7 +105,7 @@ Output is `out/AlwaysStrong-<version>.zip`. Bump upstream pins by editing the de
 ## Credits
 
 <div align="center">
-<img src="screenshots/built-on.png" alt="AlwaysStrong stands on the shoulders of TEESimulator-RS and PlayIntegrityFork" width="85%">
+<img src="screenshots/built-on.png" alt="AlwaysStrong stands on the shoulders of TEESimulator-RS and PlayIntegrityFork" width="600">
 </div>
 
 AlwaysStrong is combine of TEE-Simulator-RS + Play Integrity Fork
