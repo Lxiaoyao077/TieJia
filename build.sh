@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# AlwaysStrong build script.
+# AlwaysStrong build script — ARM-only (arm64-v8a, armeabi-v7a).
 # Downloads upstream TEESimulator-RS + PlayIntegrityFix release ZIPs,
 # overlays our scripts, repackages into a single installable Magisk ZIP.
 #
@@ -93,6 +93,16 @@ else
     SHA=""
 fi
 
+# Portable timestamp helper: GNU find -printf '%T@' vs BSD/macOS stat -f '%m'
+_timestamp() {
+    local p="$1"
+    if find --version >/dev/null 2>&1; then
+        find "$p" -type f -printf '%T@\n' 2>/dev/null
+    else
+        find "$p" -type f -exec stat -f '%m' {} \; 2>/dev/null
+    fi
+}
+
 # ---------- Clean ----------
 if [[ $DO_CLEAN -eq 1 ]]; then
     bold "==> Cleaning build/"
@@ -178,12 +188,12 @@ fi
 # ---------- Native watcher (Rust, cross-compiled via cargo-ndk) ----------
 # Compiles native/watcher/ into prebuilt/<abi>/aswatcher whenever source is
 # newer than the binaries (or any binary is missing). Requires Rust + the
-# four android targets + cargo-ndk + an Android NDK. If sources are unchanged
-# and all four prebuilts exist, we skip — keeps incremental builds fast.
+# two arm android targets + cargo-ndk + an Android NDK. If sources are
+# unchanged and both prebuilts exist, we skip — keeps incremental builds fast.
 
 WATCHER_SRC_DIR="$ROOT/native/watcher"
 WATCHER_PREBUILT="$WATCHER_SRC_DIR/prebuilt"
-WATCHER_ABIS=(arm64-v8a armeabi-v7a x86 x86_64)
+WATCHER_ABIS=(arm64-v8a armeabi-v7a)
 
 watcher_needs_build() {
     [[ -d "$WATCHER_SRC_DIR" ]] || return 1
@@ -192,10 +202,8 @@ watcher_needs_build() {
     done
     # source newer than any prebuilt binary?
     local newest_src oldest_bin
-    newest_src=$(find "$WATCHER_SRC_DIR/src" "$WATCHER_SRC_DIR/Cargo.toml" \
-                     -type f -printf '%T@\n' 2>/dev/null | sort -rn | head -1)
-    oldest_bin=$(find "$WATCHER_PREBUILT" -name aswatcher \
-                     -printf '%T@\n' 2>/dev/null | sort -n | head -1)
+    newest_src=$(_timestamp "$WATCHER_SRC_DIR/src" "$WATCHER_SRC_DIR/Cargo.toml" | sort -rn | head -1)
+    oldest_bin=$(_timestamp "$WATCHER_PREBUILT" | sort -n | head -1)
     [[ -z "$newest_src" || -z "$oldest_bin" ]] && return 0
     awk -v s="$newest_src" -v b="$oldest_bin" 'BEGIN{exit !(s>b)}'
 }
@@ -225,13 +233,13 @@ find_ndk() {
 }
 
 if watcher_needs_build; then
-    bold "==> Building native watcher (Rust, 4 ABIs)"
+    bold "==> Building native watcher (Rust, 2 ABIs)"
     if ! command -v cargo >/dev/null 2>&1 && [[ -f "$HOME/.cargo/env" ]]; then
         # shellcheck disable=SC1091
         source "$HOME/.cargo/env"
     fi
     if ! command -v cargo >/dev/null 2>&1; then
-        die "cargo not found. Install Rust: https://rustup.rs (then: rustup target add aarch64-linux-android armv7-linux-androideabi i686-linux-android x86_64-linux-android)"
+        die "cargo not found. Install Rust: https://rustup.rs (then: rustup target add aarch64-linux-android armv7-linux-androideabi)"
     fi
     if ! command -v cargo-ndk >/dev/null 2>&1; then
         die "cargo-ndk not found. Install: cargo install cargo-ndk"
@@ -242,7 +250,7 @@ if watcher_needs_build; then
     green "    NDK: $ANDROID_NDK_HOME"
     bash "$ROOT/scripts/build-watcher.sh"
 else
-    green "    cached: native watcher (4 ABIs in $WATCHER_PREBUILT)"
+    green "    cached: native watcher (2 ABIs in $WATCHER_PREBUILT)"
 fi
 
 # ---------- Native fetcher (Rust + rustls, cross-compiled via cargo-ndk) -----
@@ -252,8 +260,6 @@ fi
 ASFETCH_SRC_DIR="$ROOT/native/asfetch"
 ASFETCH_PREBUILT="$ASFETCH_SRC_DIR/prebuilt"
 # arm only — asfetch matters on real devices (no curl, busybox TLS stalls).
-# x86/x86_64 are emulator-only; there curl/busybox already work, and shipping
-# rustls for them would add ~1.9 MB to the zip for no real-device benefit.
 ASFETCH_ABIS=(arm64-v8a armeabi-v7a)
 
 asfetch_needs_build() {
@@ -262,10 +268,8 @@ asfetch_needs_build() {
         [[ -f "$ASFETCH_PREBUILT/$abi/asfetch" ]] || return 0
     done
     local newest_src oldest_bin
-    newest_src=$(find "$ASFETCH_SRC_DIR/src" "$ASFETCH_SRC_DIR/Cargo.toml" \
-                     -type f -printf '%T@\n' 2>/dev/null | sort -rn | head -1)
-    oldest_bin=$(find "$ASFETCH_PREBUILT" -name asfetch \
-                     -printf '%T@\n' 2>/dev/null | sort -n | head -1)
+    newest_src=$(_timestamp "$ASFETCH_SRC_DIR/src" "$ASFETCH_SRC_DIR/Cargo.toml" | sort -rn | head -1)
+    oldest_bin=$(_timestamp "$ASFETCH_PREBUILT" | sort -n | head -1)
     [[ -z "$newest_src" || -z "$oldest_bin" ]] && return 0
     awk -v s="$newest_src" -v b="$oldest_bin" 'BEGIN{exit !(s>b)}'
 }
@@ -282,7 +286,7 @@ if asfetch_needs_build; then
     green "    NDK: $ANDROID_NDK_HOME"
     bash "$ROOT/scripts/build-asfetch.sh"
 else
-    green "    cached: native fetcher (4 ABIs in $ASFETCH_PREBUILT)"
+    green "    cached: native fetcher (2 ABIs in $ASFETCH_PREBUILT)"
 fi
 
 # ---------- Stage layout ----------
@@ -294,7 +298,7 @@ mkdir -p "$STAGE"
 cp -a "$MODULE_SRC/." "$STAGE/"
 
 # 2) Extract TEESimulator-RS binaries. We take:
-#      - lib/<abi>/lib*.so (all four arches)
+#      - lib/<abi>/lib*.so (both arm arches)
 #      - classes.dex (renamed to tee_classes.dex to coexist with PIF's classes.dex)
 #      - keybox.xml (default AOSP, only used if user has none)
 #    We do NOT take its customize.sh/service.sh/post-fs-data.sh/action.sh — ours replace them.
@@ -304,7 +308,7 @@ mkdir -p "$TEE_EXTRACT"
 unzip -qq -o "$tee_zip" -d "$TEE_EXTRACT"
 
 mkdir -p "$STAGE/lib"
-for abi in arm64-v8a armeabi-v7a x86 x86_64; do
+for abi in arm64-v8a armeabi-v7a; do
     if [[ -d "$TEE_EXTRACT/lib/$abi" ]]; then
         mkdir -p "$STAGE/lib/$abi"
         cp "$TEE_EXTRACT/lib/$abi"/*.so "$STAGE/lib/$abi/"
@@ -316,15 +320,21 @@ cp "$TEE_EXTRACT/classes.dex" "$STAGE/tee_classes.dex"
 
 [[ -f "$TEE_EXTRACT/keybox.xml" ]] && cp "$TEE_EXTRACT/keybox.xml" "$STAGE/keybox.xml"
 
-# 3) Extract PlayIntegrityFix: zygisk libs, classes.dex (PIF's, stays as classes.dex),
-#    autopif.sh (fingerprint refresh), common_func.sh, pif.prop, security_patch.sh.
+# 3) Extract PlayIntegrityFix: zygisk libs (arm only), classes.dex (PIF's, stays
+#    as classes.dex), autopif.sh (fingerprint refresh), common_func.sh, pif.prop,
+#    security_patch.sh.
 PIF_EXTRACT="$BUILD/pif_extracted"
 rm -rf "$PIF_EXTRACT"
 mkdir -p "$PIF_EXTRACT"
 unzip -qq -o "$pif_zip" -d "$PIF_EXTRACT"
 
 mkdir -p "$STAGE/zygisk"
-cp "$PIF_EXTRACT/zygisk"/*.so "$STAGE/zygisk/" 2>/dev/null || die "PIF zygisk libs missing"
+# Only ship arm zygisk libs
+for abi in arm64-v8a armeabi-v7a; do
+    src="$PIF_EXTRACT/zygisk/$abi.so"
+    [[ -f "$src" ]] && cp "$src" "$STAGE/zygisk/"
+done
+[[ -n "$(ls -A "$STAGE/zygisk" 2>/dev/null)" ]] || die "PIF zygisk arm libs missing"
 
 [[ -f "$PIF_EXTRACT/classes.dex" ]] || die "PIF ZIP missing classes.dex"
 cp "$PIF_EXTRACT/classes.dex" "$STAGE/classes.dex"
@@ -448,8 +458,10 @@ done
 
 # 7) Ensure executable bits on shell scripts, TEE daemon, native binaries
 chmod 755 "$STAGE/daemon" "$STAGE"/*.sh 2>/dev/null || true
-for abi in arm64-v8a armeabi-v7a x86 x86_64; do
+for abi in "${WATCHER_ABIS[@]}"; do
     [[ -f "$STAGE/bin/$abi/aswatcher" ]] && chmod 755 "$STAGE/bin/$abi/aswatcher"
+done
+for abi in "${ASFETCH_ABIS[@]}"; do
     [[ -f "$STAGE/bin/$abi/asfetch" ]]   && chmod 755 "$STAGE/bin/$abi/asfetch"
 done
 
@@ -458,6 +470,7 @@ done
 # show an "Open Web UI" entry next to the module.
 
 # ---------- Generate ZIP ----------
+rm -f "$OUT"/AlwaysStrong-*.zip
 VERSION=$(grep '^version=' "$STAGE/module.prop" | cut -d= -f2)
 OUT_ZIP="$OUT/AlwaysStrong-${VERSION}.zip"
 rm -f "$OUT_ZIP"
