@@ -148,9 +148,14 @@ fi
 }&
 
 # --- TEESimulator + aswatcher watchdog ---
+# Gated by /data/adb/tricky_store/no_auto_tee — create this flag file to
+# stop the watchdog from auto-restarting TEE / aswatcher on kills.
 {
     while true; do
         sleep 120
+        if [ -f "$CONFIG_DIR/no_auto_tee" ]; then
+            continue
+        fi
         if ! pidof TEESimulator >/dev/null 2>&1 && ! pidof daemon >/dev/null 2>&1; then
             log -t "AlwaysStrong" "TEE daemon died, restarting..."
             "$MODDIR/supervisor" "$MODDIR/daemon" "$MODDIR" &
@@ -182,9 +187,9 @@ if [ ! -f "$MODDIR/.bootstrapped" ]; then
         sh "$MODDIR/keybox_fetch.sh" 2>&1 | log -t "AlwaysStrong-boot"
     fi
 
-    # 2. fingerprint + security patch (Pixel Canary via autopif4)
-    if [ -f "$MODDIR/autopif4.sh" ]; then
-        sh "$MODDIR/autopif4.sh" -s -m 2>&1 | log -t "AlwaysStrong-boot"
+    # 2. fingerprint + security patch (Pixel Canary via autopif)
+    if [ -f "$MODDIR/autopif.sh" ]; then
+        sh "$MODDIR/autopif.sh" 2>&1 | log -t "AlwaysStrong-boot"
     fi
 
     # 2b. sync the attestation/system security patch to the fresh fingerprint
@@ -231,7 +236,8 @@ fi
 # updates are picked up naturally on the next PI invocation, so we don't
 # kick running banking apps for cosmetic refreshes.
 {
-    CFG=/data/adb/tricky_store
+    CONFIG_DIR=/data/adb/tricky_store
+CFG="$CONFIG_DIR"
     export MODPATH="$MODDIR"
     while true; do
         # Interval is user-configurable from the WebUI. Default 1h, floor 60s
@@ -242,8 +248,8 @@ fi
         esac
         [ "$INT" -lt 60 ] && INT=60
         sleep "$INT"
-        if [ ! -f "$CFG/no_auto_fp" ] && [ -f "$MODDIR/autopif4.sh" ]; then
-            sh "$MODDIR/autopif4.sh" -s -m 2>&1 | log -t "AlwaysStrong-hourly"
+        if [ ! -f "$CFG/no_auto_fp" ] && [ -f "$MODDIR/autopif.sh" ]; then
+            sh "$MODDIR/autopif.sh" 2>&1 | log -t "AlwaysStrong-hourly"
             [ -f "$MODDIR/sync_patch.sh" ] && sh "$MODDIR/sync_patch.sh" 2>&1 | log -t "AlwaysStrong-hourly"
         fi
         if [ ! -f "$CFG/no_auto_keybox" ] && [ -x "$MODDIR/keybox_fetch.sh" ]; then
