@@ -60,9 +60,9 @@ FP_OK=1
 if [ -f "$MODPATH/autopif.sh" ]; then
     run_autopif() {
         if command -v timeout >/dev/null 2>&1; then
-            timeout 60 sh "$MODPATH/autopif.sh" -s -m
+            timeout 60 sh "$MODPATH/autopif.sh"
         else
-            sh "$MODPATH/autopif.sh" -s -m
+            sh "$MODPATH/autopif.sh"
         fi
     }
     run_autopif >"$CONFIG_DIR/autopif.log" 2>&1 \
