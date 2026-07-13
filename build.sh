@@ -293,16 +293,6 @@ mkdir -p "$STAGE"
 # 1) Our scripts/configs (the glue). These override anything from upstream.
 cp -a "$MODULE_SRC/." "$STAGE/"
 
-# 1b) Ship banner.png inside the module so the manager shows it locally
-#     (module.prop: banner=/data/adb/modules/tricky_store/banner.png) instead of
-#     hot-linking raw.githubusercontent.com. customize.sh extracts it on install.
-if [[ -f "$ROOT/banner.png" ]]; then
-    cp "$ROOT/banner.png" "$STAGE/banner.png"
-    green "    bundled banner.png ($(du -h "$ROOT/banner.png" | cut -f1))"
-else
-    yellow "    warning: banner.png not found at repo root — module banner will be missing"
-fi
-
 # 2) Extract TEESimulator-RS binaries. We take:
 #      - lib/<abi>/lib*.so (all four arches)
 #      - classes.dex (renamed to tee_classes.dex to coexist with PIF's classes.dex)
