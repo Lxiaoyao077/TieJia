@@ -150,12 +150,13 @@ killall -9 com.google.android.gms.unstable 2>/dev/null
 killall -9 com.android.vending 2>/dev/null
 am force-stop com.android.vending >/dev/null 2>&1
 
-# --- update module.prop status indicator ---------------------------------
+# --- fetch keybox status → indicator.txt (no longer touches module.prop) --
 if [ -x "$MODPATH/status_fetch.sh" ]; then
-    MODPATH="$MODPATH" sh "$MODPATH/status_fetch.sh" manual >/dev/null 2>&1
+    sh "$MODPATH/status_fetch.sh" >/dev/null 2>&1 &
 fi
 
 # --- summary -------------------------------------------------------------
+INDICATOR=$(cat "$CONFIG_DIR/indicator.txt" 2>/dev/null)
 pick_pif() {
     for f in "$CONFIG_DIR/custom.pif.prop" "$MODPATH/custom.pif.prop" \
              "$CONFIG_DIR/pif.prop" "$MODPATH/pif.prop"; do
@@ -167,6 +168,7 @@ PIF=$(pick_pif)
 MD=$(grep -m1 '^MODEL=' "$PIF" 2>/dev/null | cut -d= -f2-)
 [ -z "$PATCH" ] && PATCH=$(grep -m1 '^SECURITY_PATCH=' "$PIF" 2>/dev/null | cut -d= -f2-)
 
+[ -n "$INDICATOR" ] && row "🟢" "$INDICATOR"
 row "📱" "${MD:-unknown}"
 row "🗓️" "${PATCH:-unknown}"
 
