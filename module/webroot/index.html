@@ -52,7 +52,6 @@ h1{
 }
 
 /* ---------------- status pill ---------------- */
-.status[hidden]{display:none!important}
 .status{
   display:flex;align-items:center;justify-content:space-between;
   margin:0 0 22px;padding:14px 16px;
@@ -203,12 +202,12 @@ h1{
   <div class="ver" id="ver">—</div>
 </div>
 
-<div class="status" id="statusRow" hidden>
+<div class="status" id="statusRow">
   <span class="status-l">
     <span class="status-dot" id="statusDot"></span>
     <span data-i="status">Keybox status</span>
   </span>
-  <span class="status-val" id="statusVal"></span>
+  <span class="status-val" id="statusVal">—</span>
 </div>
 
 <div class="lbl" data-i="auto">Auto-update</div>
@@ -400,11 +399,13 @@ async function writeEnabled(path,on){
 async function loadStatus(){
   const r=await ksuExec(`cat "${CFG}/indicator.txt" 2>/dev/null`);
   const s=(r.stdout||"").trim();
-  if(s && /[🟢🔴🟡⚫⚪]/.test(s)){
-    document.getElementById("statusVal").textContent=s;
-    document.getElementById("statusRow").hidden=false;
+  const valEl=document.getElementById("statusVal");
+  const rowEl=document.getElementById("statusRow");
+  rowEl.hidden=false;
+  if(s && /[🟢🔴🟡⚫⚪⏳]/.test(s)){
+    valEl.textContent=s;
   } else {
-    document.getElementById("statusRow").hidden=true;
+    valEl.textContent="—";
   }
 }
 
@@ -427,6 +428,9 @@ async function init(){
   kb.addEventListener("change",e=>writeEnabled(KB_FLAG,e.target.checked));
   ind.addEventListener("change",async e=>{
     await writeEnabled(IND_FLAG,e.target.checked);
+    // Off → ask status_fetch to restore description= to clean base text.
+    // On  → next auto/manual run will write the prefix back in.
+    if(!e.target.checked) await ksuExec(`sh "${MOD}/status_fetch.sh" strip`);
     await loadStatus();
   });
   rs.addEventListener("change",e=>writeEnabled(RS_FLAG,e.target.checked));
