@@ -20,7 +20,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Install packaging tools
-        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends zip unzip
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends zip unzip python3
 
       - name: Use committed native binaries (skip the cargo-ndk step in CI)
         # native/*/prebuilt/<abi>/* are committed; touching them newer than the
@@ -28,7 +28,9 @@ jobs:
         run: find native -path '*/prebuilt/*' -type f -exec touch {} +
 
       - name: Build module zip
-        run: bash build.sh
+        env:
+          GITHUB_TOKEN: ${{ secrets.TEE_CI_TOKEN }}
+        run: bash build.sh --tee-ci
 
       - name: Release notes from CHANGELOG
         run: |
