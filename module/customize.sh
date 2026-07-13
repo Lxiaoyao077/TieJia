@@ -10,12 +10,11 @@ if [ "$KSU" = true ] && [ "$KSU_VER_CODE" -lt 10670 ]; then
   abort "please update KernelSU + manager first"
 fi
 
+# ARM-only — x86/x86_64 are emulator-only and not supported.
 case "$ARCH" in
   arm64) ABI_DIR="arm64-v8a" ;;
   arm)   ABI_DIR="armeabi-v7a" ;;
-  x64)   ABI_DIR="x86_64" ;;
-  x86)   ABI_DIR="x86" ;;
-  *)     abort "unsupported arch: $ARCH" ;;
+  *)     abort "unsupported arch: $ARCH (ARM only)" ;;
 esac
 
 [ "$API" -lt "$MIN_SDK" ] && abort "needs Android 10+ (SDK $MIN_SDK)"
@@ -88,10 +87,10 @@ else
   ui_print "TEESim installed ($ABI_DIR)"
 fi
 
-# --- PIF zygisk + dex ----------------------------------------------------
+# --- PIF zygisk (arm only) -----------------------------------------------
 mkdir -p "$MODPATH/zygisk"
 ZN=0
-for z in arm64-v8a armeabi-v7a x86 x86_64; do
+for z in arm64-v8a armeabi-v7a; do
   if unzip -l "$ZIPFILE" 2>/dev/null | grep -q "zygisk/$z.so"; then
     unzip -qqjo "$ZIPFILE" "zygisk/$z.so" -d "$MODPATH/zygisk" 2>/dev/null
     ZN=$((ZN+1))
@@ -109,7 +108,6 @@ else
   ui_print "warning: no aswatcher binary for $ABI_DIR"
 fi
 # --- asfetch native binary (TLS fetcher for keybox/status) ---------
-# Only on arm ABIs — x86/x86_64 are emulator-only where curl/busybox work.
 if [ "$ABI_DIR" = "arm64-v8a" ] || [ "$ABI_DIR" = "armeabi-v7a" ]; then
   if unzip -l "$ZIPFILE" 2>/dev/null | grep -q "bin/$ABI_DIR/asfetch"; then
     install_file "bin/$ABI_DIR/asfetch" "$MODPATH/bin/$ABI_DIR"
@@ -128,8 +126,6 @@ if unzip -l "$ZIPFILE" 2>/dev/null | grep -q "webroot/index.html"; then
   if [ "$KSU" = true ] || [ "$APATCH" = true ]; then
     ui_print "WebUI ready (open it from your manager)"
   else
-    # Magisk has no built-in WebUI host. The standalone WebUI app is fetched
-    # from GitHub and installed on the first [Action] press (see action.sh).
     ui_print "WebUI: app downloads + installs on first Action tap"
   fi
 else
@@ -145,12 +141,11 @@ else
   ui_print "default keybox installed (replace for STRONG)"
 fi
 
-# target.txt is (re)built on boot (service.sh) and on every [Action] tap — just
-# drop a default seed here so TrickyStore has something to read on first boot.
 [ -f "$CONFIG_DIR/target.txt" ] || install_file "target.txt" "$CONFIG_DIR"
 
+# /dev/urandom — non-blocking, plenty for the 32-byte hbk seed.
 if [ ! -f "$CONFIG_DIR/hbk" ]; then
-  head -c 32 /dev/random > "$CONFIG_DIR/hbk"
+  head -c 32 /dev/urandom > "$CONFIG_DIR/hbk"
   chmod 600 "$CONFIG_DIR/hbk"
 fi
 rm -f "$CONFIG_DIR/tee_status.txt" "$CONFIG_DIR/tee_status" 2>/dev/null
