@@ -64,7 +64,8 @@ printf 'all=%s\n' "$DOT" > "$CONFIG_DIR/security_patch.txt"
 # --- 2. PIF wildcard prop: spoof ro.build/ro.vendor/ro.system .security_patch
 # A single `*.security_patch=<date>` line makes PIF's zygisk hook report the
 # patch consistently to every app (this is what GMS / Play Integrity reads).
-for pf in "$MODPATH/custom.pif.prop" "$CONFIG_DIR/custom.pif.prop"; do
+# Only write to CONFIG_DIR copy — never touch MODPATH files (KSU tamper detection).
+for pf in "$CONFIG_DIR/custom.pif.prop"; do
     [ -f "$pf" ] || continue
     if grep -qE '^[#]?\*\.security_patch=' "$pf"; then
         sed -i "s|^[#]\?\*\.security_patch=.*|*.security_patch=$DOT|" "$pf"
@@ -86,3 +87,4 @@ if [ "$MODE" = "boot" ] && command -v resetprop >/dev/null 2>&1; then
 fi
 
 echo "$DOT"
+
