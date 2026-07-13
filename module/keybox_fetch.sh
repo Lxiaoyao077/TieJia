@@ -35,9 +35,7 @@ SELF_DIR=$(cd "${0%/*}" 2>/dev/null && pwd)
 case "$(uname -m)" in
     aarch64)        ABI=arm64-v8a ;;
     armv7*|armv8l)  ABI=armeabi-v7a ;;
-    x86_64)         ABI=x86_64 ;;
-    i?86)           ABI=x86 ;;
-    *)              ABI="" ;;
+    *)              ABI="" ;;  # Only ARM binaries are built — x86 falls through to curl/wget
 esac
 ASFETCH="$SELF_DIR/bin/$ABI/asfetch"
 
