@@ -397,12 +397,12 @@ async function writeEnabled(path,on){
 }
 
 async function loadStatus(){
-  const r=await ksuExec(`cat "${CFG}/indicator.txt" 2>/dev/null`);
+  const r=await ksuExec(`grep -m1 '^description=' "${MOD}/module.prop" 2>/dev/null | sed -e 's/^description=//' | awk '{print $1}'`);
   const s=(r.stdout||"").trim();
   const valEl=document.getElementById("statusVal");
   const rowEl=document.getElementById("statusRow");
   rowEl.hidden=false;
-  if(s && /[🟢🔴🟡⚫⚪⏳]/.test(s)){
+  if(s && /[🟢🔴🟡⚫⚪]/.test(s)){
     valEl.textContent=s;
   } else {
     valEl.textContent="—";
