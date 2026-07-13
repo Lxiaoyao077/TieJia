@@ -27,6 +27,17 @@ jobs:
         # sources makes build.sh package them as-is instead of needing Rust+NDK.
         run: find native -path '*/prebuilt/*' -type f -exec touch {} +
 
+      - name: Stamp version from tag
+        run: |
+          TAG="${{ github.ref_name }}"
+          # Strip leading 'v' if present
+          VER="${TAG#v}"
+          sed -i "s/^version=.*/version=${TAG}/" module/module.prop
+          sed -i "s/^versionCode=.*/versionCode=${VER//./}/" module/module.prop
+          sed -i 's/"version": ".*"/"version": "'"${TAG}"'"/' update.json
+          sed -i 's/"versionCode": [0-9]*/"versionCode": '"${VER//./}"'/' update.json
+          echo "Stamped version: ${TAG} (code: ${VER//./})"
+
       - name: Build module zip
         env:
           GITHUB_TOKEN: ${{ secrets.TEE_CI_TOKEN }}
@@ -55,3 +66,11 @@ jobs:
           draft: false
           prerelease: false
           fail_on_unmatched_files: true
+
+      - name: Commit updated version files
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add module/module.prop update.json
+          git diff --staged --quiet || git commit -m "bump to ${{ github.ref_name }} [skip ci]"
+          git push
