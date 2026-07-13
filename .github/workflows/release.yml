@@ -41,17 +41,12 @@ jobs:
           ' CHANGELOG.md > RELEASE_NOTES.md
           echo "----- notes -----"; cat RELEASE_NOTES.md
 
-      - name: Create stable-named copy for update.json
-        run: |
-          cp out/AlwaysStrong-*.zip out/AlwaysStrong-latest.zip
-
       - name: Publish release
         uses: softprops/action-gh-release@v2
         with:
           name: ${{ github.ref_name }}
           body_path: RELEASE_NOTES.md
-          files: |
-            out/AlwaysStrong-*.zip
+          files: out/AlwaysStrong-*.zip
           draft: false
           prerelease: false
           fail_on_unmatched_files: true
