@@ -397,7 +397,7 @@ async function writeEnabled(path,on){
 }
 
 async function loadStatus(){
-  const r=await ksuExec(`grep -m1 '^description=' "${MOD}/module.prop" 2>/dev/null | sed -e 's/^description=//' | awk '{print $1}'`);
+  const r=await ksuExec(`cat "${CFG}/indicator.txt" 2>/dev/null`);
   const s=(r.stdout||"").trim();
   if(s && /[🟢🔴🟡⚫⚪]/.test(s)){
     document.getElementById("statusVal").textContent=s;
@@ -426,9 +426,6 @@ async function init(){
   kb.addEventListener("change",e=>writeEnabled(KB_FLAG,e.target.checked));
   ind.addEventListener("change",async e=>{
     await writeEnabled(IND_FLAG,e.target.checked);
-    // Off → ask status_fetch to restore description= to clean base text.
-    // On  → next auto/manual run will write the prefix back in.
-    if(!e.target.checked) await ksuExec(`sh "${MOD}/status_fetch.sh" strip`);
     await loadStatus();
   });
   rs.addEventListener("change",e=>writeEnabled(RS_FLAG,e.target.checked));
