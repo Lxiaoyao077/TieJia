@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
 # AlwaysStrong build script.
-# Downloads upstream TEESimulator-RS + PlayIntegrityFork release ZIPs,
+# Downloads upstream TEESimulator-RS + PlayIntegrityFix release ZIPs,
 # overlays our scripts, repackages into a single installable Magisk ZIP.
 #
 # Usage:
 #   ./build.sh                  # build with defaults (latest pinned upstream versions)
 #   ./build.sh --tee v6.0.0     # override TEESimulator-RS release tag
-#   ./build.sh --pif v16        # override PlayIntegrityFork release tag
+#   ./build.sh --pif v16        # override PlayIntegrityFix release tag
 #   ./build.sh --tee-file PATH  # use a LOCAL TEESimulator-RS zip (e.g. a CI build) — skip download
-#   ./build.sh --pif-file PATH  # use a LOCAL PlayIntegrityFork zip (e.g. a CI build) — skip download
+#   ./build.sh --pif-file PATH  # use a LOCAL PlayIntegrityFix zip (e.g. a CI build) — skip download
 #   ./build.sh --tee-ci         # download latest TEESimulator-RS from Andrea-lyz/TEESimulator-RS-Online CI
 #   ./build.sh --clean          # wipe build/ first
 #
@@ -24,8 +24,8 @@ set -euo pipefail
 # Find latest via: https://api.github.com/repos/<owner>/<repo>/releases/latest
 TEE_TAG_DEFAULT="v6.0.1-282"
 TEE_ASSET_DEFAULT="TEESimulator-RS-v6.0.1-282-Release.zip"
-PIF_TAG_DEFAULT="v17"
-PIF_ASSET_DEFAULT="PlayIntegrityFork-v17.zip"
+PIF_TAG_DEFAULT="v4.7-inject-s"
+PIF_ASSET_DEFAULT="PlayIntegrityFix_v4.7-inject-s.zip"
 
 TEE_TAG="$TEE_TAG_DEFAULT"
 TEE_ASSET="$TEE_ASSET_DEFAULT"
@@ -164,9 +164,9 @@ if [[ -n "$PIF_FILE" ]]; then
     pif_zip="$PIF_FILE"
     green "    local PIF zip: $PIF_FILE"
 elif [[ ! -f "$pif_zip" ]]; then
-    bold "==> Downloading PlayIntegrityFork $PIF_TAG"
-    $FETCH "$pif_zip" "https://github.com/osm0sis/PlayIntegrityFork/releases/download/$PIF_TAG/$PIF_ASSET" \
-        || die "PlayIntegrityFork download failed"
+    bold "==> Downloading PlayIntegrityFix $PIF_TAG"
+    $FETCH "$pif_zip" "https://github.com/KOWX712/PlayIntegrityFix/releases/download/$PIF_TAG/$PIF_ASSET" \
+        || die "PlayIntegrityFix download failed"
 else
     green "    cached: $PIF_ASSET"
 fi
@@ -326,9 +326,8 @@ cp "$TEE_EXTRACT/classes.dex" "$STAGE/tee_classes.dex"
 
 [[ -f "$TEE_EXTRACT/keybox.xml" ]] && cp "$TEE_EXTRACT/keybox.xml" "$STAGE/keybox.xml"
 
-# 3) Extract PlayIntegrityFork: zygisk libs, classes.dex (PIF's, stays as classes.dex),
-#    autopif4.sh/killpi.sh/migrate.sh (refresh tooling), example.pif.prop/app_replace_list.txt,
-#    common_setup.sh.
+# 3) Extract PlayIntegrityFix: zygisk libs, classes.dex (PIF's, stays as classes.dex),
+#    autopif.sh (fingerprint refresh), common_func.sh, pif.prop, security_patch.sh.
 PIF_EXTRACT="$BUILD/pif_extracted"
 rm -rf "$PIF_EXTRACT"
 mkdir -p "$PIF_EXTRACT"
@@ -340,7 +339,7 @@ cp "$PIF_EXTRACT/zygisk"/*.so "$STAGE/zygisk/" 2>/dev/null || die "PIF zygisk li
 [[ -f "$PIF_EXTRACT/classes.dex" ]] || die "PIF ZIP missing classes.dex"
 cp "$PIF_EXTRACT/classes.dex" "$STAGE/classes.dex"
 
-for f in autopif4.sh killpi.sh migrate.sh common_setup.sh example.pif.prop app_replace_list.txt; do
+for f in autopif.sh common_func.sh pif.prop security_patch.sh; do
     if [[ -f "$PIF_EXTRACT/$f" ]]; then
         cp "$PIF_EXTRACT/$f" "$STAGE/$f"
     fi
@@ -366,7 +365,7 @@ done
 # 5) Rewrite hard-coded /data/adb/modules/playintegrityfix references in PIF scripts
 #    to our module id (tricky_store). Done in-place on copies inside the stage.
 bold "==> Patching PIF script paths -> /data/adb/modules/tricky_store"
-for f in "$STAGE/autopif4.sh" "$STAGE/killpi.sh" "$STAGE/migrate.sh" "$STAGE/common_setup.sh"; do
+for f in "$STAGE/autopif.sh" "$STAGE/security_patch.sh" "$STAGE/common_func.sh"; do
     [[ -f "$f" ]] || continue
     # Linux/macOS sed compat
     if sed --version >/dev/null 2>&1; then
@@ -377,27 +376,7 @@ for f in "$STAGE/autopif4.sh" "$STAGE/killpi.sh" "$STAGE/migrate.sh" "$STAGE/com
     "${SED_I[@]}" 's|/data/adb/modules/playintegrityfix|/data/adb/modules/tricky_store|g' "$f"
 done
 
-# Bound autopif4's wget calls so a hung IPv6 connect doesn't stall the whole
-# bootstrap. Use the short -T (timeout, seconds) option ONLY: it's the single
-# flag that toybox wget, busybox wget AND GNU wget all accept. The long forms
-# (--timeout / --tries) are NOT in toybox wget, and --tries isn't in busybox
-# wget either — injecting them makes every fetch error out with "unknown
-# option" and the fingerprint refresh silently fails.
-if [[ -f "$STAGE/autopif4.sh" ]]; then
-    bold "==> Patching autopif4.sh: wget -T 10"
-    "${SED_I[@]}" 's|wget -q |wget -q -T 10 |g' "$STAGE/autopif4.sh"
 
-    # autopif4 only falls back to busybox wget when the system wget is missing
-    # or is the wget-curl shim. On a Pixel the toybox wget exists but lacks the
-    # --no-check-certificate / --header / --spider options autopif4 relies on,
-    # so the crawl dies. Magisk/KSU/APatch always ship a busybox that supports
-    # all of them — prefer it whenever present.
-    bold "==> Patching autopif4.sh: prefer busybox wget"
-    perl -0777 -pi -e 's{if ! which wget >/dev/null \|\| grep -q "wget-curl" \$\(which wget\); then}{if find_busybox; then wget() { \$BUSYBOX wget "\$\@"; }; elif ! which wget >/dev/null || grep -q "wget-curl" \$(which wget); then}' "$STAGE/autopif4.sh" \
-        && grep -q 'if find_busybox; then wget()' "$STAGE/autopif4.sh" \
-        && green "    busybox-wget preference applied" \
-        || yellow "    warning: could not apply busybox-wget preference (autopif4 layout changed?)"
-fi
 
 # 5b) Binary-patch the PIF zygisk .so libraries so they read classes.dex and
 #     pif config from OUR module dir (/data/adb/modules/tricky_store) instead
@@ -458,7 +437,7 @@ for so in "$STAGE/zygisk"/*.so; do
         die "zygisk byte-patch incomplete — upstream changed PIF's hardcoded path. Update SO_PATCH in build.sh before shipping."
     fi
 done
-for f in autopif4.sh killpi.sh migrate.sh common_setup.sh; do
+for f in autopif.sh security_patch.sh common_func.sh; do
     [[ -f "$STAGE/$f" ]] || continue
     if grep -qF 'modules/playintegrityfix' "$STAGE/$f"; then
         die "$f still references modules/playintegrityfix after sed patch — upstream layout changed; fix the path patch in build.sh."
