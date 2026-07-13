@@ -37,7 +37,11 @@ done
 # the keystore attestation in lock-step with the Build/* fingerprint PIF
 # spoofs. (The module-folder path it also checks no longer exists by design.)
 if [ -n "$SRC" ] && [ "$SRC" != "/data/adb/pif.prop" ]; then
-    cp -f "$SRC" /data/adb/pif.prop 2>/dev/null && chmod 644 /data/adb/pif.prop 2>/dev/null
+    if cp -f "$SRC" /data/adb/pif.prop 2>/dev/null; then
+        chmod 644 /data/adb/pif.prop 2>/dev/null
+    else
+        echo "sync_patch: WARNING: failed to copy $SRC to /data/adb/pif.prop" >&2
+    fi
 fi
 # fall back to whatever the device already reports
 [ -z "$SP" ] && SP=$(getprop ro.build.version.security_patch 2>/dev/null)
