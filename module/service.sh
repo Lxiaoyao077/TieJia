@@ -5,6 +5,7 @@ cd "$MODDIR"
 
 set +o standalone 2>/dev/null
 unset ASH_STANDALONE
+CONFIG_DIR=/data/adb/tricky_store
 
 [ -f "$MODDIR/common_func.sh" ] && . "$MODDIR/common_func.sh"
 
@@ -71,10 +72,6 @@ fi
 }&
 
 # --- Conflict re-scan on every boot ---
-# A user can install a conflicting module AFTER they've installed AlwaysStrong
-# (the install-time scan in customize.sh only fires once). Re-run the same
-# disable-known-conflicts pass at every boot so a fresh install of e.g.
-# playintegrityfix doesn't silently break our hooks.
 if [ -x "$MODDIR/conflict_scan.sh" ]; then
     MODPATH="$MODDIR" sh "$MODDIR/conflict_scan.sh" >/dev/null 2>&1
     n=$?
@@ -84,7 +81,6 @@ fi
 # --- Wait for boot, then start TEE simulator ---
 while [ "$(getprop sys.boot_completed)" != "1" ]; do sleep 2; done
 
-# Kill any stale TEE / aswatcher processes from a previous boot
 for proc in TEESimulator supervisor daemon aswatcher; do
   for pid in $(pidof "$proc" 2>/dev/null); do
     kill -9 "$pid" 2>/dev/null
@@ -92,15 +88,12 @@ for proc in TEESimulator supervisor daemon aswatcher; do
 done
 pkill -9 -f TEESimulator 2>/dev/null || true
 
-# Fork-based supervisor + daemon (TEESimulator-RS standard pattern)
 "$MODDIR/supervisor" "$MODDIR/daemon" "$MODDIR" &
 
-# --- aswatcher native daemon (inotify target.txt + Xposed + conflict) ---
+# --- aswatcher native daemon (arm only) ---
 case "$(uname -m)" in
     aarch64)       AS_ABI=arm64-v8a ;;
     armv7*|armv8l) AS_ABI=armeabi-v7a ;;
-    x86_64)        AS_ABI=x86_64 ;;
-    i?86)          AS_ABI=x86 ;;
     *)             AS_ABI="" ;;
 esac
 AS_BIN="$MODDIR/bin/$AS_ABI/aswatcher"
@@ -113,8 +106,6 @@ if [ -x "$AS_BIN" ]; then
 fi
 
 # --- VBMeta digest (deferred, bounded) ---
-# Reading the whole vbmeta partition during early boot can hang the boot
-# animation on some Xiaomi devices. Skip if already set, only read 64KiB.
 {
 sleep 60
 CURRENT_DIGEST=$(resetprop ro.boot.vbmeta.digest)
@@ -135,7 +126,6 @@ fi
 # --- Housekeeping in background ---
 {
     sleep 3
-    # Hide TWRP-style recovery folders on /sdcard if empty
     for rdir in TWRP Fox OrangeFox PBRP PitchBlack Recovery; do
         target="/sdcard/$rdir"
         if [ -d "$target" ] && [ "$(ls -A "$target" 2>/dev/null)" ]; then
@@ -147,9 +137,7 @@ fi
     rm -f /sdcard/.twrps 2>/dev/null
 }&
 
-# --- TEESimulator + aswatcher watchdog ---
-# Gated by /data/adb/tricky_store/no_auto_tee — create this flag file to
-# stop the watchdog from auto-restarting TEE / aswatcher on kills.
+# --- TEESimulator + aswatcher watchdog (CONFIG_DIR now defined at top) ---
 {
     while true; do
         sleep 120
@@ -167,37 +155,31 @@ fi
     done
 }&
 
-# --- First-boot bootstrap (one-shot per module install) ------------------
-# Marker file lives inside MODDIR — gets wiped when the module is
-# uninstalled, so a reinstall re-bootstraps cleanly. On subsequent boots
-# this whole block is a no-op; users press [Action] to refresh manually.
+# --- First-boot bootstrap (one-shot per module install) ---
 if [ ! -f "$MODDIR/.bootstrapped" ]; then
 {
     sleep 20
-    # network usually up well before this, but defer further for slow boots
+    # Try Cloudflare DNS first, fall back to Google DNS for restricted regions
     j=0
-    until ping -c1 -W2 1.1.1.1 >/dev/null 2>&1; do
+    until ping -c1 -W2 1.1.1.1 >/dev/null 2>&1 \
+          || ping -c1 -W2 8.8.8.8 >/dev/null 2>&1; do
         j=$((j+1)); [ $j -gt 30 ] && break
         sleep 2
     done
     log -t "AlwaysStrong-boot" "first boot: starting bootstrap"
 
-    # 1. keybox
     if [ -x "$MODDIR/keybox_fetch.sh" ]; then
         sh "$MODDIR/keybox_fetch.sh" 2>&1 | log -t "AlwaysStrong-boot"
     fi
 
-    # 2. fingerprint + security patch (Pixel Canary via autopif)
     if [ -f "$MODDIR/autopif.sh" ]; then
         sh "$MODDIR/autopif.sh" 2>&1 | log -t "AlwaysStrong-boot"
     fi
 
-    # 2b. sync the attestation/system security patch to the fresh fingerprint
     [ -f "$MODDIR/sync_patch.sh" ] && sh "$MODDIR/sync_patch.sh" 2>&1 | log -t "AlwaysStrong-boot"
 
-    # 3. enforce STRONG-friendly settings on every produced pif.prop variant
     for CPIF in "$MODDIR/custom.pif.prop" "$MODDIR/pif.prop" \
-                /data/adb/tricky_store/custom.pif.prop /data/adb/tricky_store/pif.prop; do
+                "$CONFIG_DIR/custom.pif.prop" "$CONFIG_DIR/pif.prop"; do
         [ -f "$CPIF" ] || continue
         for kv in "spoofProvider=0" "spoofVendingFinger=1" "spoofBuild=1" \
                   "spoofProps=1" "spoofSignature=0" "spoofVendingSdk=0"; do
@@ -211,48 +193,29 @@ if [ ! -f "$MODDIR/.bootstrapped" ]; then
         log -t "AlwaysStrong-boot" "STRONG enforced on $CPIF"
     done
 
-    # 4. restart PI consumers so they pick up the new state
     killall -9 com.google.android.gms.unstable 2>/dev/null
     killall -9 com.android.vending 2>/dev/null
 
-    # NOTE: deliberately do NOT call status_fetch here. We don't want
-    # the 🟢 status prefix to appear in module.prop's description before
-    # the user has interacted with the module at all — the description
-    # stays as the clean text from module.prop until the user presses
-    # [Action] (or the hourly refresh fires, whichever happens first).
-
-    # mark done regardless of individual step outcome — user can press
-    # [Action] to retry if any step failed (e.g. no internet on first boot)
     touch "$MODDIR/.bootstrapped"
     log -t "AlwaysStrong-boot" "bootstrap done"
 }&
 fi
 
-# --- Hourly refresh (fingerprint + keybox, each toggle-able from WebUI) --
-# WebUI writes flag files into /data/adb/tricky_store/ to opt OUT:
-#   no_auto_fp      -> skip the autopif4 refresh
-#   no_auto_keybox  -> skip the keybox fetch
-# Keybox-only restarts PI when it actually changed (exit 0); fingerprint
-# updates are picked up naturally on the next PI invocation, so we don't
-# kick running banking apps for cosmetic refreshes.
+# --- Hourly refresh ---
 {
-    CONFIG_DIR=/data/adb/tricky_store
-CFG="$CONFIG_DIR"
     export MODPATH="$MODDIR"
     while true; do
-        # Interval is user-configurable from the WebUI. Default 1h, floor 60s
-        # so a misconfigured 0/-1/garbage doesn't busy-spin the loop.
-        INT=$(cat "$CFG/hourly_interval_sec" 2>/dev/null)
+        INT=$(cat "$CONFIG_DIR/hourly_interval_sec" 2>/dev/null)
         case "$INT" in
             ''|*[!0-9]*) INT=3600 ;;
         esac
         [ "$INT" -lt 60 ] && INT=60
         sleep "$INT"
-        if [ ! -f "$CFG/no_auto_fp" ] && [ -f "$MODDIR/autopif.sh" ]; then
+        if [ ! -f "$CONFIG_DIR/no_auto_fp" ] && [ -f "$MODDIR/autopif.sh" ]; then
             sh "$MODDIR/autopif.sh" 2>&1 | log -t "AlwaysStrong-hourly"
             [ -f "$MODDIR/sync_patch.sh" ] && sh "$MODDIR/sync_patch.sh" 2>&1 | log -t "AlwaysStrong-hourly"
         fi
-        if [ ! -f "$CFG/no_auto_keybox" ] && [ -x "$MODDIR/keybox_fetch.sh" ]; then
+        if [ ! -f "$CONFIG_DIR/no_auto_keybox" ] && [ -x "$MODDIR/keybox_fetch.sh" ]; then
             kbout=$(sh "$MODDIR/keybox_fetch.sh" 2>&1)
             kbrc=$?
             [ -n "$kbout" ] && echo "$kbout" | log -t "AlwaysStrong-hourly"
@@ -262,7 +225,6 @@ CFG="$CONFIG_DIR"
                 killall -9 com.android.vending 2>/dev/null
             fi
         fi
-        # Status — independent of toggles; cheap GET, idempotent module.prop write
         if [ -x "$MODDIR/status_fetch.sh" ]; then
             sh "$MODDIR/status_fetch.sh" 2>&1 | log -t "AlwaysStrong-hourly"
         fi
