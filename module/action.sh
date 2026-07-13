@@ -145,18 +145,21 @@ if [ -d /data/adb/magisk ] && [ "$KSU" != "true" ] && [ "$APATCH" != "true" ]; t
     fi
 fi
 
+# --- fetch keybox status → indicator.txt (no longer touches module.prop) --
+# Read current indicator first (it's already on disk from hourly/bootstrap),
+# then refresh in background for next time.
+INDICATOR=$(cat "$CONFIG_DIR/indicator.txt" 2>/dev/null)
+if [ -x "$MODPATH/status_fetch.sh" ]; then
+    sh "$MODPATH/status_fetch.sh" >/dev/null 2>&1 &
+fi
+
 # --- restart PI (silent) -------------------------------------------------
 killall -9 com.google.android.gms.unstable 2>/dev/null
 killall -9 com.android.vending 2>/dev/null
 am force-stop com.android.vending >/dev/null 2>&1
 
-# --- fetch keybox status → indicator.txt (no longer touches module.prop) --
-if [ -x "$MODPATH/status_fetch.sh" ]; then
-    sh "$MODPATH/status_fetch.sh" >/dev/null 2>&1 &
-fi
-
 # --- summary -------------------------------------------------------------
-INDICATOR=$(cat "$CONFIG_DIR/indicator.txt" 2>/dev/null)
+row() { echo "    $1   $2"; }
 pick_pif() {
     for f in "$CONFIG_DIR/custom.pif.prop" "$MODPATH/custom.pif.prop" \
              "$CONFIG_DIR/pif.prop" "$MODPATH/pif.prop"; do
@@ -203,3 +206,4 @@ if { [ "$KSU" = "true" ] || [ "$APATCH" = "true" ]; } \
    && [ "$KSU_NEXT" != "true" ] && [ "$WKSU" != "true" ] && [ "$MMRL" != "true" ]; then
     sleep 2
 fi
+
