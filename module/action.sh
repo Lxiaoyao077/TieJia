@@ -65,8 +65,15 @@ if [ -f "$MODPATH/autopif.sh" ]; then
             sh "$MODPATH/autopif.sh"
         fi
     }
+    run_autopif_quick() {
+        if command -v timeout >/dev/null 2>&1; then
+            timeout 30 sh "$MODPATH/autopif.sh"
+        else
+            sh "$MODPATH/autopif.sh"
+        fi
+    }
     run_autopif >"$CONFIG_DIR/autopif.log" 2>&1 \
-        || { sleep 2; run_autopif >>"$CONFIG_DIR/autopif.log" 2>&1 || FP_OK=0; }
+        || { sleep 2; run_autopif_quick >>"$CONFIG_DIR/autopif.log" 2>&1 || FP_OK=0; }
 fi
 
 # --- enforce STRONG-friendly spoof settings on every pif variant ----------
@@ -118,7 +125,7 @@ WEBUI_MSG=""
 if [ -d /data/adb/magisk ] && [ "$KSU" != "true" ] && [ "$APATCH" != "true" ]; then
     PKG=io.github.a13e300.ksuwebui
     [ -n "$(find "$MODPATH/.webui_busy" -mmin +5 2>/dev/null)" ] && rm -f "$MODPATH/.webui_busy" 2>/dev/null
-    if ! pm path "$PKG" >/dev/null 2>&1 && [ ! -f "$MODPATH/.webui_busy" ]; then
+    if ! pm path "$PKG" >/dev/null 2>&1 && [ ! -f "$MODPATH/.webui_busy" ] && [ ! -f "$MODPATH/.webui_installed" ]; then
         WEBUI_MSG="📲|installing WebUI app (background)"
         : > "$MODPATH/.webui_busy"
         {
@@ -129,7 +136,9 @@ if [ -d /data/adb/magisk ] && [ "$KSU" != "true" ] && [ "$APATCH" != "true" ]; t
             [ -z "$URL" ] && URL="$FB"
             if dl_to "$T" "$URL" && [ -s "$T" ]; then
                 chmod 644 "$T" 2>/dev/null
-                pm install -r "$T" >/dev/null 2>&1
+                if pm install -r "$T" >/dev/null 2>&1; then
+                    touch "$MODPATH/.webui_installed" 2>/dev/null
+                fi
             fi
             rm -f "$T" "$MODPATH/.webui_busy" 2>/dev/null
         } &
