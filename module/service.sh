@@ -91,11 +91,7 @@ pkill -9 -f TEESimulator 2>/dev/null || true
 "$MODDIR/supervisor" "$MODDIR/daemon" "$MODDIR" &
 
 # --- aswatcher native daemon (arm only) ---
-case "$(uname -m)" in
-    aarch64)       AS_ABI=arm64-v8a ;;
-    armv7*|armv8l) AS_ABI=armeabi-v7a ;;
-    *)             AS_ABI="" ;;
-esac
+AS_ABI=$(get_abi)
 AS_BIN="$MODDIR/bin/$AS_ABI/aswatcher"
 if [ -x "$AS_BIN" ]; then
     {
@@ -178,6 +174,11 @@ if [ ! -f "$CONFIG_DIR/.bootstrapped" ]; then
 
     [ -f "$MODDIR/sync_patch.sh" ] && sh "$MODDIR/sync_patch.sh" 2>&1 | log -t "AlwaysStrong-boot"
 
+    # Fetch keybox status early so WebUI has data on first load
+    if [ -x "$MODDIR/status_fetch.sh" ]; then
+        sh "$MODDIR/status_fetch.sh" 2>&1 | log -t "AlwaysStrong-boot"
+    fi
+
     for CPIF in "$CONFIG_DIR/custom.pif.prop" "$CONFIG_DIR/pif.prop"; do
         [ -f "$CPIF" ] || continue
         for kv in "spoofProvider=0" "spoofVendingFinger=1" "spoofBuild=1" \
@@ -229,3 +230,4 @@ fi
         fi
     done
 }&
+
