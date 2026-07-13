@@ -62,11 +62,11 @@ fi
 
 # --- extract our scripts + configs ---------------------------------------
 for f in module.prop service.sh post-fs-data.sh action.sh \
-         uninstall.sh common_func.sh common_setup.sh sepolicy.rule \
+         uninstall.sh common_func.sh sepolicy.rule \
          keybox_fetch.sh build_target_txt.sh status_fetch.sh description.txt \
          rom_spoof_block.sh conflict_scan.sh sync_patch.sh \
-         autopif4.sh killpi.sh migrate.sh \
-         app_replace_list.txt example.pif.prop target.txt daemon ; do
+         autopif.sh pif.prop security_patch.sh \
+         target.txt daemon ; do
   install_file "$f" "$MODPATH"
 done
 
@@ -113,6 +113,14 @@ if unzip -l "$ZIPFILE" 2>/dev/null | grep -q "bin/$ABI_DIR/aswatcher"; then
   chmod 755 "$MODPATH/bin/$ABI_DIR/aswatcher"
 else
   ui_print "warning: no aswatcher binary for $ABI_DIR"
+fi
+# --- asfetch native binary (TLS fetcher for keybox/status) ---------
+# Only on arm ABIs — x86/x86_64 are emulator-only where curl/busybox work.
+if [ "$ABI_DIR" = "arm64-v8a" ] || [ "$ABI_DIR" = "armeabi-v7a" ]; then
+  if unzip -l "$ZIPFILE" 2>/dev/null | grep -q "bin/$ABI_DIR/asfetch"; then
+    install_file "bin/$ABI_DIR/asfetch" "$MODPATH/bin/$ABI_DIR"
+    chmod 755 "$MODPATH/bin/$ABI_DIR/asfetch"
+  fi
 fi
 
 chmod 755 "$MODPATH/daemon" "$MODPATH/supervisor" "$MODPATH/inject" \
