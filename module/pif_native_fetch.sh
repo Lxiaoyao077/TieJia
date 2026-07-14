@@ -1,21 +1,35 @@
 #!/system/bin/sh
-# AlwaysStrong — native fingerprint fallback.
+# AlwaysStrong — primary fingerprint fetch.
 #
-# PlayIntegrityFork's autopif4.sh crawls Google's Pixel build servers with
-# busybox `wget`, whose built-in TLS stalls mid-stream on some devices/CDNs —
-# so on those devices autopif4 silently fails and no fresh fingerprint lands.
-# This script replays the SAME crawl (developer.android.com → flash.android.com
-# → content-flashstation-pa.googleapis.com → source.android.com) but drives it
-# with our statically-linked rustls fetcher (asfetch), which speaks TLS 1.2/1.3
-# correctly everywhere. curl / busybox wget are used only if asfetch is absent.
+# Unified fingerprint fetcher: replaces autopif.sh and pif_native_fetch.sh.
+# Crawls Google's Pixel build servers (developer.android.com → flash.android.com
+# → content-flashstation-pa.googleapis.com → source.android.com), driven by
+# our statically-linked rustls fetcher (asfetch) with curl / busybox wget
+# fallback. asfetch speaks TLS 1.2/1.3 correctly everywhere, avoiding the
+# busybox-wget TLS stall that silently breaks autopif.sh on some devices/CDNs.
 #
-# On success it writes a minimal Pixel Canary pif.prop to $CONFIG_DIR/pif.prop
-# (same file the shipped static fallback in action.sh uses) and exits 0.
-# Any failure exits non-zero and leaves the existing pif untouched.
+# Supports autopif.sh-compatible flags (-s -m -a -l) for drop-in replacement.
+# On success writes a minimal Pixel Canary pif.prop to $CONFIG_DIR/pif.prop
+# and exits 0. Any failure exits non-zero and leaves the existing pif untouched.
 #
 # Exit codes:
 #   0  fresh fingerprint written
 #   1  crawl/parse failed (nothing written)
+
+# ---- Parse flags (compatible with autopif.sh / autopif4.sh callers) ----
+# All three flags are effectively no-ops: this script already outputs STRONG-
+# friendly props and already does device matching. Kept for caller compatibility.
+FORCE_STRONG=1 FORCE_MATCH=1
+while [ $# -gt 0 ]; do
+    case "$1" in
+        -s|--strong)   shift ;;   # STRONG-friendly (already default)
+        -m|--match)    shift ;;   # device matching (already default)
+        -a|--advanced) shift ;;   # advanced props (already default)
+        -l|--list)     LIST_ONLY=1; shift ;;
+        -h|--help)     echo "pif_native_fetch.sh [-s] [-m] [-a] [-l]"; exit 0 ;;
+        *) break ;;
+    esac
+done
 
 CONFIG_DIR=/data/adb/tricky_store
 TARGET="$CONFIG_DIR/pif.prop"
@@ -119,6 +133,26 @@ fi
 MODEL_LIST=$($GREP -A1 'tr id=' "$W/$SRC.html" | $GREP 'td' | sed 's;.*<td>\(.*\)</td>.*;\1;')
 PRODUCT_LIST=$($GREP 'tr id=' "$W/$SRC.html" | sed 's;.*<tr id="\(.*\)".*;\1_beta;')
 [ -z "$PRODUCT_LIST" ] && { log "device list parse failed."; exit 1; }
+
+# --list mode: output JSON device catalogue and exit immediately
+if [ "${LIST_ONLY:-0}" = 1 ]; then
+    printf '{"model":['
+    first=1
+    echo "$MODEL_LIST" | while read -r m; do
+        [ "$first" = 0 ] && printf ','
+        printf '"%s"' "$m"
+        first=0
+    done
+    printf '],"product":['
+    first=1
+    echo "$PRODUCT_LIST" | while read -r p; do
+        [ "$first" = 0 ] && printf ','
+        printf '"%s"' "$p"
+        first=0
+    done
+    printf ']}\n'
+    exit 0
+fi
 
 # ---- 2. select device: prefer an exact match for THIS device, else random ----
 MODEL=""; PRODUCT=""; DEVICE=""
