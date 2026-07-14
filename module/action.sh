@@ -32,6 +32,15 @@ for bb in /data/adb/magisk/busybox /data/adb/ksu/bin/busybox /data/adb/ap/bin/bu
     [ -x "$bb" ] && BB="$bb" && break
 done
 
+# Resolve sed with -i support — toybox sed (AOSP default) lacks -i,
+# so we fall back to busybox sed which always supports it.
+SED="sed -i"
+if [ -n "$BB" ]; then
+    SED="$BB sed -i"
+elif command -v busybox >/dev/null 2>&1; then
+    SED="busybox sed -i"
+fi
+
 # asfetch first (connects IPv4-first, works on IPv6-only-DNS networks); fall
 # through to busybox wget / curl if it ever fails on a host.
 dl_out() {
@@ -168,7 +177,7 @@ for f in "$MODPATH/custom.pif.prop" "$MODPATH/pif.prop" \
               spoofProps=1 spoofSignature=0 spoofVendingSdk=0; do
         k="${kv%=*}"; v="${kv#*=}"
         if grep -qE "^${k}=" "$f"; then
-            sed -i "s|^${k}=.*|${k}=${v}|" "$f"
+            $SED "s|^${k}=.*|${k}=${v}|" "$f"
         else
             echo "${k}=${v}" >> "$f"
         fi
