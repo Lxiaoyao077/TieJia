@@ -1,6 +1,6 @@
 #!/system/bin/sh
 # AlwaysStrong action button.
-# Refreshes fingerprint (autopif), enforces STRONG settings, syncs security
+# Refreshes fingerprint (autopif4), enforces STRONG settings, syncs security
 # patch, then restarts PI consumers. Runs the whole chain silently and prints
 # one clean, framed summary: device, security patch, fingerprint, keybox.
 
@@ -48,8 +48,8 @@ if [ -x "$MODPATH/keybox_fetch.sh" ]; then
     fi
 fi
 
-# --- autopif: fetch a fresh Pixel fingerprint from Google ----------------
-# autopif pulls the latest Pixel build from several Google hosts (developer.
+# --- autopif4: fetch a fresh Pixel fingerprint from Google ----------------
+# autopif4 pulls the latest Pixel build from several Google hosts (developer.
 # android.com, flash.android.com, content-flashstation-pa.googleapis.com, ...)
 # and exits non-zero if ANY single one fails — that is exactly what shows up
 # as "fingerprint cached (offline?)". Bound it with a timeout so a stalled
@@ -57,27 +57,19 @@ fi
 # keep the real output in CONFIG_DIR/autopif.log (instead of /dev/null) so an
 # "offline" result is actually diagnosable.
 FP_OK=1
-if [ -f "$MODPATH/autopif.sh" ]; then
+if [ -f "$MODPATH/autopif4.sh" ]; then
     run_autopif() {
         if command -v timeout >/dev/null 2>&1; then
-            timeout 60 sh "$MODPATH/autopif.sh"
+            timeout 60 sh "$MODPATH/autopif4.sh" -s -m
         else
-            sh "$MODPATH/autopif.sh"
-        fi
-    }
-    run_autopif_quick() {
-        if command -v timeout >/dev/null 2>&1; then
-            timeout 30 sh "$MODPATH/autopif.sh"
-        else
-            sh "$MODPATH/autopif.sh"
+            sh "$MODPATH/autopif4.sh" -s -m
         fi
     }
     run_autopif >"$CONFIG_DIR/autopif.log" 2>&1 \
-        || { sleep 2; run_autopif_quick >>"$CONFIG_DIR/autopif.log" 2>&1 || FP_OK=0; }
+        || { sleep 2; run_autopif >>"$CONFIG_DIR/autopif.log" 2>&1 || FP_OK=0; }
 fi
 
-# --- enforce STRONG-friendly spoof settings on CONFIG_DIR pif variants --
-# Never touch MODPATH files — KSU hashes them at install, any write = tampered.
+# --- enforce STRONG-friendly spoof settings on every pif variant ----------
 for f in "$CONFIG_DIR/custom.pif.prop" "$CONFIG_DIR/pif.prop"; do
     [ -f "$f" ] || continue
     for kv in spoofProvider=0 spoofVendingFinger=1 spoofBuild=1 \
@@ -125,7 +117,7 @@ WEBUI_MSG=""
 if [ -d /data/adb/magisk ] && [ "$KSU" != "true" ] && [ "$APATCH" != "true" ]; then
     PKG=io.github.a13e300.ksuwebui
     [ -n "$(find "$MODPATH/.webui_busy" -mmin +5 2>/dev/null)" ] && rm -f "$MODPATH/.webui_busy" 2>/dev/null
-    if ! pm path "$PKG" >/dev/null 2>&1 && [ ! -f "$MODPATH/.webui_busy" ] && [ ! -f "$MODPATH/.webui_installed" ]; then
+    if ! pm path "$PKG" >/dev/null 2>&1 && [ ! -f "$MODPATH/.webui_busy" ]; then
         WEBUI_MSG="📲|installing WebUI app (background)"
         : > "$MODPATH/.webui_busy"
         {
@@ -136,21 +128,11 @@ if [ -d /data/adb/magisk ] && [ "$KSU" != "true" ] && [ "$APATCH" != "true" ]; t
             [ -z "$URL" ] && URL="$FB"
             if dl_to "$T" "$URL" && [ -s "$T" ]; then
                 chmod 644 "$T" 2>/dev/null
-                if pm install -r "$T" >/dev/null 2>&1; then
-                    touch "$MODPATH/.webui_installed" 2>/dev/null
-                fi
+                pm install -r "$T" >/dev/null 2>&1
             fi
             rm -f "$T" "$MODPATH/.webui_busy" 2>/dev/null
         } &
     fi
-fi
-
-# --- fetch keybox status → indicator.txt (no longer touches module.prop) --
-# Read current indicator first (it's already on disk from hourly/bootstrap),
-# then refresh in background for next time.
-INDICATOR=$(cat "$CONFIG_DIR/indicator.txt" 2>/dev/null)
-if [ -x "$MODPATH/status_fetch.sh" ]; then
-    sh "$MODPATH/status_fetch.sh" >/dev/null 2>&1 &
 fi
 
 # --- restart PI (silent) -------------------------------------------------
@@ -158,8 +140,12 @@ killall -9 com.google.android.gms.unstable 2>/dev/null
 killall -9 com.android.vending 2>/dev/null
 am force-stop com.android.vending >/dev/null 2>&1
 
+# --- update module.prop status indicator ---------------------------------
+if [ -x "$MODPATH/status_fetch.sh" ]; then
+    MODPATH="$MODPATH" sh "$MODPATH/status_fetch.sh" manual >/dev/null 2>&1
+fi
+
 # --- summary -------------------------------------------------------------
-row() { echo "    $1   $2"; }
 pick_pif() {
     for f in "$CONFIG_DIR/custom.pif.prop" "$MODPATH/custom.pif.prop" \
              "$CONFIG_DIR/pif.prop" "$MODPATH/pif.prop"; do
@@ -171,7 +157,6 @@ PIF=$(pick_pif)
 MD=$(grep -m1 '^MODEL=' "$PIF" 2>/dev/null | cut -d= -f2-)
 [ -z "$PATCH" ] && PATCH=$(grep -m1 '^SECURITY_PATCH=' "$PIF" 2>/dev/null | cut -d= -f2-)
 
-[ -n "$INDICATOR" ] && row "🟢" "$INDICATOR"
 row "📱" "${MD:-unknown}"
 row "🗓️" "${PATCH:-unknown}"
 
@@ -206,4 +191,3 @@ if { [ "$KSU" = "true" ] || [ "$APATCH" = "true" ]; } \
    && [ "$KSU_NEXT" != "true" ] && [ "$WKSU" != "true" ] && [ "$MMRL" != "true" ]; then
     sleep 2
 fi
-
