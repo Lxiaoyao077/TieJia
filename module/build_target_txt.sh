@@ -26,17 +26,11 @@ MODE="auto"
 CFG_MODE="/data/adb/tricky_store/target_mode"
 # Consume --mode <val> in one pass: peek at arg after --mode, set MODE, skip val
 has_explicit_mode=0
-skip_next=0
+next_is_mode=0
 for arg in "$@"; do
-    [ "$skip_next" = 1 ] && { skip_next=0; continue; }
+    [ "$next_is_mode" = 1 ] && { MODE="$arg"; next_is_mode=0; continue; }
     case "$arg" in
-        --mode)
-            skip_next=1
-            has_explicit_mode=1
-            ;;
-        auto|force|certchain)
-            MODE="$arg"
-            ;;
+        --mode) next_is_mode=1; has_explicit_mode=1 ;;
     esac
 done
 # Strip CR from persisted config (handles Windows-line-ending edits via adb)
