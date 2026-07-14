@@ -8,6 +8,11 @@ unset ASH_STANDALONE
 
 [ -f "$MODDIR/common_func.sh" ] && . "$MODDIR/common_func.sh"
 
+# --- Logcat leak prevention (early) ---
+if [ -x "$MODDIR/logcat_cleanup.sh" ]; then
+    sh "$MODDIR/logcat_cleanup.sh" >/dev/null 2>&1 &
+fi
+
 # --- Recovery mode guard ---
 resetprop_if_match ro.boot.mode recovery unknown
 resetprop_if_match ro.bootmode recovery unknown
@@ -47,6 +52,46 @@ resetprop_if_diff ro.debuggable 0
 resetprop_if_diff ro.adb.secure 1
 resetprop_if_diff service.adb.root 0
 resetprop_if_diff ro.boot.vbmeta.invalidate_on_error yes
+
+# --- USB / ADB / Developer status concealment ---
+# Clear all developer-related USB config and ADB state.
+# Banking and ID apps check these to infer a tampered environment.
+delprop_if_exist persist.sys.usb.config 2>/dev/null || true
+delprop_if_exist persist.sys.usb.ffs.ready 2>/dev/null || true
+delprop_if_exist persist.vendor.usb.config 2>/dev/null || true
+delprop_if_exist persist.usb.config 2>/dev/null || true
+resetprop_if_diff sys.usb.state "mtp"
+resetprop_if_diff sys.usb.config "mtp"
+resetprop_if_diff init.svc.adbd "stopped"
+resetprop_if_diff persist.adb.enable 0
+resetprop_if_diff persist.sys.usb.config "mtp"
+resetprop_if_diff persist.vendor.usb.config "mtp"
+
+# Stop adbd daemon if running
+setprop ctl.stop adbd 2>/dev/null || true
+
+# Developer options + OEM unlock visibility
+delprop_if_exist persist.logd.logpersistd 2>/dev/null || true
+delprop_if_exist persist.logd.logpersistd.enable 2>/dev/null || true
+resetprop_if_diff ro.debuggable 0
+resetprop_if_diff ro.force.debuggable 0
+resetprop_if_diff ro.adb.secure 1
+resetprop_if_diff service.adb.root 0
+resetprop_if_diff ro.build.type "user"
+resetprop_if_diff ro.build.tags "release-keys"
+resetprop_if_diff ro.build.selinux "1"
+resetprop_if_diff persist.sys.dalvik.vm.lib.2 "libart.so"
+resetprop_if_diff dalvik.vm.dex2oat-filter "speed"
+resetprop_if_diff dalvik.vm.image-dex2oat-filter "speed"
+
+# Tracer / debug detection — banking apps scan these
+delprop_if_exist ro.monkey 2>/dev/null || true
+delprop_if_exist ro.boot.monkey 2>/dev/null || true
+delprop_if_exist ro.build.user 2>/dev/null || true
+delprop_if_exist ro.build.host 2>/dev/null || true
+
+# Magic overlay props — hide from Magisk/KSU overlays detection
+delprop_if_exist ro.dalvik.vm.native.bridge 2>/dev/null || true
 
 # --- LineageOS prop scrub (hide derivative-ROM markers from PI checks) ---
 LV=$(getprop ro.product.vendor.name 2>/dev/null)
@@ -109,6 +154,32 @@ if [ -x "$AS_BIN" ]; then
         sleep 5
         "$AS_BIN" &
         log -t "AlwaysStrong" "aswatcher launched ($AS_ABI)"
+    } &
+fi
+
+# --- Mount namespace isolation for GMS (Specter-style) ---
+if [ -x "$MODDIR/mount_isolation.sh" ]; then
+    {
+        sleep 30
+        MODPATH="$MODDIR" sh "$MODDIR/mount_isolation.sh" >/dev/null 2>&1 &
+        log -t "AlwaysStrong" "mount isolation daemon started"
+    } &
+fi
+
+# --- /proc trace obfuscation ---
+if [ -x "$MODDIR/proc_obfuscate.sh" ]; then
+    {
+        sleep 10
+        MODPATH="$MODDIR" sh "$MODDIR/proc_obfuscate.sh" >/dev/null 2>&1 &
+        log -t "AlwaysStrong" "proc obfuscation daemon started"
+    } &
+fi
+
+# --- Prop unification (align product props with fingerprint) ---
+if [ -x "$MODDIR/prop_unify.sh" ]; then
+    {
+        sleep 40
+        MODPATH="$MODDIR" sh "$MODDIR/prop_unify.sh" >/dev/null 2>&1 &
     } &
 fi
 
@@ -190,6 +261,9 @@ if [ ! -f "$CONFIG_DIR/.bootstrapped" ]; then
     # 2b. sync the attestation/system security patch to the fresh fingerprint
     [ -f "$MODDIR/sync_patch.sh" ] && sh "$MODDIR/sync_patch.sh" 2>&1 | log -t "AlwaysStrong-boot"
 
+    # 2c. unify product props with spoofed fingerprint (detection cross-consistency)
+    [ -x "$MODDIR/prop_unify.sh" ] && MODPATH="$MODDIR" sh "$MODDIR/prop_unify.sh" 2>&1 | log -t "AlwaysStrong-unify"
+
     # 3. enforce STRONG-friendly settings on every produced pif.prop variant
     for CPIF in /data/adb/tricky_store/custom.pif.prop /data/adb/tricky_store/pif.prop; do
         [ -f "$CPIF" ] || continue
@@ -244,6 +318,7 @@ fi
         if [ ! -f "$CFG/no_auto_fp" ] && [ -f "$MODDIR/autopif.sh" ]; then
             sh "$MODDIR/autopif.sh" -s -m 2>&1 | log -t "AlwaysStrong-hourly"
             [ -f "$MODDIR/sync_patch.sh" ] && sh "$MODDIR/sync_patch.sh" 2>&1 | log -t "AlwaysStrong-hourly"
+            [ -x "$MODDIR/prop_unify.sh" ] && MODPATH="$MODDIR" sh "$MODDIR/prop_unify.sh" 2>&1 | log -t "AlwaysStrong-unify"
         fi
         if [ ! -f "$CFG/no_auto_keybox" ] && [ -x "$MODDIR/keybox_fetch.sh" ]; then
             kbout=$(sh "$MODDIR/keybox_fetch.sh" 2>&1)
