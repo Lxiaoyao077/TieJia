@@ -338,7 +338,7 @@ done
 [[ -f "$PIF_EXTRACT/classes.dex" ]] || die "PIF ZIP missing classes.dex"
 cp "$PIF_EXTRACT/classes.dex" "$STAGE/classes.dex"
 
-for f in autopif.sh common_func.sh pif.prop security_patch.sh; do
+for f in autopif.sh pif.prop security_patch.sh; do
     if [[ -f "$PIF_EXTRACT/$f" ]]; then
         cp "$PIF_EXTRACT/$f" "$STAGE/$f"
     fi
@@ -379,6 +379,10 @@ done
 #    (KSU tamper: any runtime write to MODPATH triggers "module tampered")
 bold "==> Patching security_patch.sh: system.prop -> CONFIG_DIR"
 "${SED_I[@]}" 's|\$MODDIR/system.prop|/data/adb/tricky_store/system.prop|g' "$STAGE/security_patch.sh"
+
+# 7) Patch PIF autopif.sh: TEMPDIR fallback -> CONFIG_DIR (avoid MODPATH write on KSU)
+bold "==> Patching autopif.sh: TEMPDIR fallback -> CONFIG_DIR"
+"${SED_I[@]}" 's|TEMPDIR="\$MODDIR/temp" #fallback|TEMPDIR="/data/adb/tricky_store/temp" #fallback (AlwaysStrong: avoid KSU MODPATH write)|g' "$STAGE/autopif.sh"
 
 
 
