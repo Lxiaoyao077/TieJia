@@ -388,7 +388,7 @@ bold "==> Patching security_patch.sh: system.prop -> CONFIG_DIR"
 bold "==> Patching autopif.sh: eliminate ALL MODPATH writes"
 "${SED_I[@]}" 's|TEMPDIR="\$MODDIR/temp" #fallback|TEMPDIR="/data/adb/tricky_store/temp" #fallback (AlwaysStrong)|g' "$STAGE/autopif.sh"
 "${SED_I[@]}" 's|tee pif\.prop|tee "\$TEMPDIR/pif.prop"|' "$STAGE/autopif.sh"
-"${SED_I[@]}" 's|cd "\$TEMPDIR"$|cd "\$TEMPDIR" || { echo "autopif: cd failed" >\&2; exit 1; }|' "$STAGE/autopif.sh"
+"${SED_I[@]}" 's@cd "\$TEMPDIR"$@cd "\$TEMPDIR" || { echo "autopif: cd failed" >\&2; exit 1; }@' "$STAGE/autopif.sh"
 
 
 
