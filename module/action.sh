@@ -1,8 +1,6 @@
 #!/system/bin/sh
 # AlwaysStrong action button.
-# Refreshes fingerprint (autopif), enforces STRONG settings, syncs security
-# patch, then restarts PI consumers. Runs the whole chain silently and prints
-# one clean, framed summary: device, security patch, fingerprint, keybox.
+# Shows each step progressively with status feedback.
 
 case "$0" in
     */*) MODPATH=$(cd "${0%/*}" 2>/dev/null && pwd) ;;
@@ -11,28 +9,58 @@ esac
 [ -z "$MODPATH" ] && MODPATH="$PWD"
 cd "$MODPATH" 2>/dev/null
 
-# disable busybox ash standalone mode — must run in current shell, not subshell
 set +o standalone 2>/dev/null
 unset ASH_STANDALONE
 
 CONFIG_DIR=/data/adb/tricky_store
-LINE="━━━━━━━━━━━━━━━━━━━━━━━━━"
+LINE="========================="
 VER=$(grep -m1 '^version=' "$MODPATH/module.prop" 2>/dev/null | cut -d= -f2-)
 
-# one consistent row style for every line (success or failure)
 row() { echo "    $1   $2"; }
 
+# --- ABI + fetchers ---
+case "$(uname -m)" in
+    aarch64)        ABI=arm64-v8a ;;
+    armv7*|armv8l)  ABI=armeabi-v7a ;;
+    *)              ABI="" ;;
+esac
+ASFETCH=""
+[ -n "$ABI" ] && [ -x "$MODPATH/bin/$ABI/asfetch" ] && ASFETCH="$MODPATH/bin/$ABI/asfetch"
+BB=""
+for bb in /data/adb/magisk/busybox /data/adb/ksu/bin/busybox /data/adb/ap/bin/busybox \
+          /data/adb/modules/busybox-ndk/system/*/busybox; do
+    [ -x "$bb" ] && BB="$bb" && break
+done
+
+# asfetch first (connects IPv4-first, works on IPv6-only-DNS networks); fall
+# through to busybox wget / curl if it ever fails on a host.
+dl_out() {
+    if [ -n "$ASFETCH" ]; then $ASFETCH -T 20 "$1" 2>/dev/null && return 0; fi
+    if [ -n "$BB" ]; then $BB wget -q -T 20 -O - "$1" 2>/dev/null && return 0; fi
+    if command -v curl >/dev/null 2>&1; then curl -fsSL --max-time 20 "$1" 2>/dev/null && return 0; fi
+    if command -v wget >/dev/null 2>&1; then wget -q -T 20 -O - "$1" 2>/dev/null && return 0; fi
+    return 1
+}
+dl_to() {
+    if [ -n "$ASFETCH" ]; then rm -f "$1"; $ASFETCH -T 60 -o "$1" "$2" 2>/dev/null; [ -s "$1" ] && return 0; fi
+    if [ -n "$BB" ]; then rm -f "$1"; $BB wget -q -T 60 -O "$1" "$2" 2>/dev/null; [ -s "$1" ] && return 0; fi
+    if command -v curl >/dev/null 2>&1; then rm -f "$1"; curl -fsSL --max-time 60 -o "$1" "$2" 2>/dev/null; [ -s "$1" ] && return 0; fi
+    if command -v wget >/dev/null 2>&1; then rm -f "$1"; wget -q -T 60 -O "$1" "$2" 2>/dev/null; [ -s "$1" ] && return 0; fi
+    return 1
+}
+
+# --- Header ---
 echo ""
 echo "  $LINE"
 row "🛡️" "AlwaysStrong  ${VER}"
 echo "  $LINE"
 echo ""
-row "⏳" "initializing, please wait"
-echo "  $LINE"
+row "⏳" "initializing..."
+sleep 3
 
-# --- target.txt + keybox (silent) ----------------------------------------
-# build_target_txt rewrites target.txt every tap: reads persisted mode from
-# CONFIG_DIR/target_mode, applies suffix accordingly. Count what landed.
+# --- Step 1: Target list ---
+# build_target_txt reads persisted mode from CONFIG_DIR/target_mode,
+# applies suffix accordingly (auto/force/certchain).
 if [ -x "$MODPATH/build_target_txt.sh" ]; then
     TGT_MODE=$(tr -d '\r' < "$CONFIG_DIR/target_mode" 2>/dev/null)
     case "$TGT_MODE" in
@@ -42,39 +70,95 @@ if [ -x "$MODPATH/build_target_txt.sh" ]; then
     sh "$MODPATH/build_target_txt.sh" --mode "$TGT_MODE" "$CONFIG_DIR/target.txt" >/dev/null 2>&1
 fi
 TGT_N=$(grep -cvE '^[[:space:]]*$' "$CONFIG_DIR/target.txt" 2>/dev/null)
-# Keybox: always fetch in BACKGROUND. The synchronous path could block the
-# Action for 30+ seconds on a slow mirror, making the user think the whole
-# flow is frozen at "initializing". Background fetch writes to a temp pid
-# file so the summary section can report "downloading" instead of "missing".
+row "🎯" "${TGT_N:-0} apps > target"
+sleep 1
+
+# --- Step 2: Keybox ---
+# Custom-keybox mode (WebUI toggle): user supplied their own keybox, skip fetch.
 KB_PID=""
-if [ -x "$MODPATH/keybox_fetch.sh" ]; then
-    sh "$MODPATH/keybox_fetch.sh" >/dev/null 2>&1 &
-    KB_PID=$!
-fi
-
-# --- autopif: fetch a fresh Pixel fingerprint from Google ----------------
-# autopif pulls the latest Pixel build from several Google hosts (developer.
-# android.com, flash.android.com, content-flashstation-pa.googleapis.com, ...)
-# and exits non-zero if ANY single one fails — that is exactly what shows up
-# as "fingerprint cached (offline?)". Bound it with a timeout so a stalled
-# connection can't freeze the Action, retry once for transient failures, and
-# keep the real output in CONFIG_DIR/autopif.log (instead of /dev/null) so an
-# "offline" result is actually diagnosable.
-FP_OK=1
-if [ -f "$MODPATH/autopif.sh" ]; then
-    run_autopif() {
-        if command -v timeout >/dev/null 2>&1; then
-            timeout 60 sh "$MODPATH/autopif.sh" -s -m
+if [ -f "$CONFIG_DIR/custom_keybox" ]; then
+    if [ -s "$CONFIG_DIR/keybox.xml" ] && head -c 4096 "$CONFIG_DIR/keybox.xml" | grep -q "Keybox"; then
+        row "🔑" "custom keybox — skip fetch"
+        row "ℹ️" "disable in webui for auto"
+    else
+        row "⚠️" "custom keybox not set"
+    fi
+elif [ -x "$MODPATH/keybox_fetch.sh" ]; then
+    if [ -s "$CONFIG_DIR/keybox.xml" ] && head -c 4096 "$CONFIG_DIR/keybox.xml" | grep -q "Keybox"; then
+        sh "$MODPATH/keybox_fetch.sh" >/dev/null 2>&1 &
+        KB_PID=$!
+        row "🔑" "keybox ok"
+    else
+        sh "$MODPATH/keybox_fetch.sh" >/dev/null 2>&1
+        if [ -s "$CONFIG_DIR/keybox.xml" ] && head -c 4096 "$CONFIG_DIR/keybox.xml" | grep -q "Keybox"; then
+            row "🔑" "keybox updated"
         else
-            sh "$MODPATH/autopif.sh" -s -m
+            row "⚠️" "keybox missing"
         fi
-    }
-    run_autopif >"$CONFIG_DIR/autopif.log" 2>&1 \
-        || { sleep 2; run_autopif >>"$CONFIG_DIR/autopif.log" 2>&1 || FP_OK=0; }
+    fi
+else
+    row "⚠️" "keybox fetch not available"
+fi
+sleep 1
+
+# --- Step 3: Fingerprint ---
+# Three-tier fallback: native crawl (pif_native_fetch.sh, 15s timeout) →
+# autopif4 (10s timeout) → shipped static fingerprints (rotate between 2).
+# Guarantees a fingerprint even with no network at all.
+FP_OK=0
+FP_SRC=""
+
+# Primary: native crawl, bounded to 15s total.
+if [ -x "$MODPATH/pif_native_fetch.sh" ]; then
+    if command -v timeout >/dev/null 2>&1; then
+        timeout 15 sh "$MODPATH/pif_native_fetch.sh" >"$CONFIG_DIR/autopif.log" 2>&1
+    else
+        sh "$MODPATH/pif_native_fetch.sh" >"$CONFIG_DIR/autopif.log" 2>&1
+    fi
+    if [ -s "$CONFIG_DIR/pif.prop" ] && grep -q "FINGERPRINT=" "$CONFIG_DIR/pif.prop"; then
+        FP_OK=1; FP_SRC="native"
+    fi
 fi
 
-# --- enforce STRONG-friendly spoof settings on every pif variant ----------
-for f in "$CONFIG_DIR/custom.pif.prop" "$CONFIG_DIR/pif.prop"; do
+if [ "$FP_OK" = 0 ]; then
+    row "🔄" "trying with fallback"
+    sleep 1
+
+    # Fallback A: autopif4 (PIF fork) — bounded to 10s.
+    if [ -f "$MODPATH/autopif4.sh" ]; then
+        if command -v timeout >/dev/null 2>&1; then
+            timeout 10 sh "$MODPATH/autopif4.sh" -s -m >>"$CONFIG_DIR/autopif.log" 2>&1 && FP_OK=1
+        else
+            sh "$MODPATH/autopif4.sh" -s -m >>"$CONFIG_DIR/autopif.log" 2>&1 && FP_OK=1
+        fi
+        [ "$FP_OK" = 1 ] && FP_SRC="pif"
+    fi
+
+    # Fallback B: shipped static fingerprints (alternate between 2 each tap).
+    if [ "$FP_OK" = 0 ]; then
+        IDX_FILE="$CONFIG_DIR/.fp_idx"
+        IDX=$(cat "$IDX_FILE" 2>/dev/null)
+        if [ "$IDX" = "2" ]; then IDX=1; else IDX=2; fi
+        echo "$IDX" > "$IDX_FILE" 2>/dev/null
+
+        FB="$MODPATH/pif_fallback_${IDX}.prop"
+        if [ -s "$FB" ] && grep -q "FINGERPRINT=" "$FB"; then
+            cp -f "$FB" "$CONFIG_DIR/pif.prop"
+            FP_OK=1; FP_SRC="local"
+        fi
+    fi
+fi
+
+case "$FP_SRC" in
+    pif|native) row "🌐" "fingerprint ok" ;;
+    local)      row "🌐" "fingerprint ok (local)" ;;
+    *)          row "⚠️" "fingerprint failed" ;;
+esac
+sleep 1
+
+# --- Step 4: Spoof settings + security patch ---
+for f in "$MODPATH/custom.pif.prop" "$MODPATH/pif.prop" \
+         "$CONFIG_DIR/custom.pif.prop" "$CONFIG_DIR/pif.prop"; do
     [ -f "$f" ] || continue
     for kv in spoofProvider=0 spoofVendingFinger=1 spoofBuild=1 \
               spoofProps=1 spoofSignature=0 spoofVendingSdk=0; do
@@ -87,42 +171,41 @@ for f in "$CONFIG_DIR/custom.pif.prop" "$CONFIG_DIR/pif.prop"; do
     done
 done
 
-# --- sync security patch (attestation + Build) ---------------------------
-# Pass "boot" so this ALSO resetprops ro.build.version.security_patch (and the
-# vendor/system variants) to match the spoofed fingerprint. Without it the raw
-# system prop only gets refreshed at boot, so after an Action-driven fingerprint
-# bump the TEE patch (security_patch.txt) moves ahead while the system prop stays
-# at the device's real patch — an inconsistency that both looks like "patch not
-# updating" and can weaken the STRONG verdict. resetprop is available (root) in
-# the Action context, same as post-fs-data.
 PATCH=""
 [ -f "$MODPATH/sync_patch.sh" ] && PATCH=$(sh "$MODPATH/sync_patch.sh" boot 2>/dev/null)
 
-# --- WebUI: Magisk only → fetch KsuWebUI from GitHub if absent (silent) ----
-dl_out() {
-    if command -v curl >/dev/null 2>&1; then curl -fsSL --max-time 20 "$1"
-    elif [ -x /data/adb/magisk/busybox ]; then /data/adb/magisk/busybox wget -q -T 20 -O - "$1"
-    elif command -v wget >/dev/null 2>&1; then wget -q -T 20 -O - "$1"
-    else return 1; fi
+pick_pif() {
+    for f in "$CONFIG_DIR/custom.pif.prop" "$MODPATH/custom.pif.prop" \
+             "$CONFIG_DIR/pif.prop" "$MODPATH/pif.prop"; do
+        [ -s "$f" ] && { echo "$f"; return 0; }
+    done
+    return 1
 }
-dl_to() {
-    if command -v curl >/dev/null 2>&1; then curl -fsSL --max-time 60 -o "$1" "$2"
-    elif [ -x /data/adb/magisk/busybox ]; then /data/adb/magisk/busybox wget -q -T 60 -O "$1" "$2"
-    elif command -v wget >/dev/null 2>&1; then wget -q -T 60 -O "$1" "$2"
-    else return 1; fi
-}
-# Only Magisk needs the standalone WebUI app. KSU/KSU-Next/APatch host the
-# webroot natively from their own manager, so skip them. The APK download used
-# to run inline, which blocked the Action button for up to a minute on Magisk
-# on every tap the app wasn't installed yet. Do it in the BACKGROUND so the
-# summary prints immediately; a lock file keeps repeated taps from stacking
-# downloads, and a stale lock (tap that never finished) is cleared after 5 min.
-WEBUI_MSG=""
+PIF=$(pick_pif)
+MD=$(grep -m1 '^MODEL=' "$PIF" 2>/dev/null | cut -d= -f2-)
+[ -z "$PATCH" ] && PATCH=$(grep -m1 '^SECURITY_PATCH=' "$PIF" 2>/dev/null | cut -d= -f2-)
+
+row "🗓️" "${PATCH:-unknown}"
+sleep 1
+
+# --- Step 5: Device ---
+row "📱" "${MD:-unknown}"
+sleep 1
+
+# --- Restart PI + status ---
+killall -9 com.google.android.gms.unstable 2>/dev/null
+killall -9 com.android.vending 2>/dev/null
+am force-stop com.android.vending >/dev/null 2>&1
+
+if [ -x "$MODPATH/status_fetch.sh" ]; then
+    MODPATH="$MODPATH" sh "$MODPATH/status_fetch.sh" manual >/dev/null 2>&1
+fi
+
+# --- WebUI: Magisk only (background, silent) ---
 if [ -d /data/adb/magisk ] && [ "$KSU" != "true" ] && [ "$APATCH" != "true" ]; then
     PKG=io.github.a13e300.ksuwebui
     [ -n "$(find "$MODPATH/.webui_busy" -mmin +5 2>/dev/null)" ] && rm -f "$MODPATH/.webui_busy" 2>/dev/null
     if ! pm path "$PKG" >/dev/null 2>&1 && [ ! -f "$MODPATH/.webui_busy" ]; then
-        WEBUI_MSG="📲|installing WebUI app (background)"
         : > "$MODPATH/.webui_busy"
         {
             T=/data/local/tmp/.aswebui.apk
@@ -139,58 +222,7 @@ if [ -d /data/adb/magisk ] && [ "$KSU" != "true" ] && [ "$APATCH" != "true" ]; t
     fi
 fi
 
-# --- restart PI (silent) -------------------------------------------------
-killall -9 com.google.android.gms.unstable 2>/dev/null
-killall -9 com.android.vending 2>/dev/null
-am force-stop com.android.vending >/dev/null 2>&1
-
-# --- update module.prop status indicator ---------------------------------
-if [ -x "$MODPATH/status_fetch.sh" ]; then
-    MODPATH="$MODPATH" sh "$MODPATH/status_fetch.sh" manual >/dev/null 2>&1
-fi
-
-# --- summary -------------------------------------------------------------
-pick_pif() {
-    for f in "$CONFIG_DIR/custom.pif.prop" "$MODPATH/custom.pif.prop" \
-             "$CONFIG_DIR/pif.prop" "$MODPATH/pif.prop"; do
-        [ -s "$f" ] && { echo "$f"; return 0; }
-    done
-    return 1
-}
-PIF=$(pick_pif)
-MD=$(grep -m1 '^MODEL=' "$PIF" 2>/dev/null | cut -d= -f2-)
-[ -z "$PATCH" ] && PATCH=$(grep -m1 '^SECURITY_PATCH=' "$PIF" 2>/dev/null | cut -d= -f2-)
-
-row "📱" "${MD:-unknown}"
-row "🗓️" "${PATCH:-unknown}"
-
-if [ "$FP_OK" = 1 ]; then
-    row "🌐" "fingerprint fresh"
-else
-    row "⚠️" "fingerprint cached (offline?)"
-fi
-
-KB="$CONFIG_DIR/keybox.xml"
-# Wait up to 10 s for the background keybox fetch. autopif already gave it
-# 60+ s head start, so in practice this is almost always instant.
-if [ -n "$KB_PID" ] && kill -0 "$KB_PID" 2>/dev/null; then
-    i=0
-    while kill -0 "$KB_PID" 2>/dev/null && [ "$i" -lt 10 ]; do
-        sleep 1; i=$((i + 1))
-    done
-fi
-if [ -s "$KB" ] && head -c 4096 "$KB" | grep -q "Keybox"; then
-    row "🔑" "keybox ok"
-elif [ -n "$KB_PID" ] && kill -0 "$KB_PID" 2>/dev/null; then
-    row "⏳" "keybox downloading..."
-else
-    row "⚠️" "keybox missing"
-fi
-
-[ -n "$TGT_N" ] && row "🎯" "${TGT_N} apps → target"
-
-[ -n "$WEBUI_MSG" ] && row "${WEBUI_MSG%%|*}" "${WEBUI_MSG#*|}"
-
+# --- Done ---
 echo "  $LINE"
 row "✅" "done"
 echo "  $LINE"
