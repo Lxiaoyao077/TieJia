@@ -88,10 +88,17 @@ if [ -n "$FINGERPRINT" ]; then
 
   log "fingerprint → brand=$FP_BRAND product=$FP_PRODUCT device=$FP_DEVICE"
 
+  # Apply manufacturer (from pif.prop's MANUFACTURER or fingerprint brand)
+  # Do this before brand/product so manufacturer is never set to lowercase brand.
+  if [ -n "$MANUFACTURER" ]; then
+    set_prop ro.product.manufacturer "$MANUFACTURER"
+  elif [ -n "$FP_BRAND" ]; then
+    set_prop ro.product.manufacturer "$FP_BRAND"
+  fi
+
   # Apply brand
   [ -n "$FP_BRAND" ] && {
     set_prop ro.product.brand "$FP_BRAND"
-    set_prop ro.product.manufacturer "$FP_BRAND"  # many OEMs set these equal
   }
 
   # Apply product name
@@ -110,11 +117,6 @@ if [ -n "$FINGERPRINT" ]; then
   if [ -n "$MODEL" ]; then
     set_prop ro.product.model "$MODEL"
     set_prop ro.product.system.model "$MODEL"
-  fi
-
-  # Apply manufacturer
-  if [ -n "$MANUFACTURER" ]; then
-    set_prop ro.product.manufacturer "$MANUFACTURER"
   fi
 
   # Apply build description — construct from fingerprint fields
