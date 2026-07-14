@@ -378,7 +378,7 @@ done
 # 6) Patch PIF security_patch.sh: write system.prop to CONFIG_DIR instead of MODPATH
 #    (KSU tamper: any runtime write to MODPATH triggers "module tampered")
 bold "==> Patching security_patch.sh: system.prop -> CONFIG_DIR"
-"${SED_I[@]}" 's|$MODDIR/system.prop|/data/adb/tricky_store/system.prop|g' "$STAGE/security_patch.sh"
+"${SED_I[@]}" 's|\$MODDIR/system.prop|/data/adb/tricky_store/system.prop|g' "$STAGE/security_patch.sh"
 
 
 
