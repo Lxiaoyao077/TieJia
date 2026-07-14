@@ -21,10 +21,12 @@ echo "Pixel Canary pif.prop generator script \
   \n  by osm0sis @ xda-developers";
 
 case "$0" in
-  *.sh) DIR="$0";;
-  *) DIR="$(lsof -p $$ 2>/dev/null | grep -o '/.*autopif4.sh$')";;
+  */*.sh) DIR="$0";;
+  *.sh)   DIR="$(pwd)/$0";;
+  *)      DIR="$(pwd)/autopif4.sh";;
 esac;
-DIR=$(dirname "$(readlink -f "$DIR")");
+DIR=$(dirname "$(readlink -f "$DIR" 2>/dev/null || echo "$DIR")");
+[ -z "$DIR" ] && DIR=/data/adb/modules/tricky_store
 
 item() { echo "\n- $@"; }
 die() { echo "\nError: $@!"; exit 1; }
