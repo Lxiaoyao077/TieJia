@@ -13,7 +13,14 @@ mkdir -p "$LOG_DIR" 2>/dev/null
 
 LOG_TAG="AlwaysStrong"
 
-log_private() { log -t "$LOG_TAG" "$@"; }
+LOG_FILE="$MODDIR/logs/module.log"
+log_private() {
+  local ts=$(date '+%m-%d %H:%M:%S' 2>/dev/null)
+  log -t "$LOG_TAG" "$@"
+  echo "[$ts] $*" >> "$LOG_FILE" 2>/dev/null
+  # Keep last 200 lines
+  tail -n 200 "$LOG_FILE" > "$LOG_FILE.tmp" 2>/dev/null && mv "$LOG_FILE.tmp" "$LOG_FILE" 2>/dev/null
+}
 
 # --- 1. Suppress our log tags via prop ---
 # Some ROMs have persist.log.tag.* props that control per-tag logging.
