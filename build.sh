@@ -375,6 +375,11 @@ for f in "$STAGE/autopif.sh" "$STAGE/security_patch.sh" "$STAGE/common_func.sh";
     "${SED_I[@]}" 's|/data/adb/modules/playintegrityfix|/data/adb/modules/tricky_store|g' "$f"
 done
 
+# 6) Patch PIF security_patch.sh: write system.prop to CONFIG_DIR instead of MODPATH
+#    (KSU tamper: any runtime write to MODPATH triggers "module tampered")
+bold "==> Patching security_patch.sh: system.prop -> CONFIG_DIR"
+"${SED_I[@]}" 's|$MODDIR/system.prop|/data/adb/tricky_store/system.prop|g' "$STAGE/security_patch.sh"
+
 
 
 # 5b) Binary-patch the PIF zygisk .so libraries so they read classes.dex and
