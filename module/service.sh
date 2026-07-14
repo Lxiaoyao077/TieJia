@@ -182,9 +182,9 @@ if [ ! -f "$CONFIG_DIR/.bootstrapped" ]; then
         sh "$MODDIR/keybox_fetch.sh" 2>&1 | log -t "AlwaysStrong-boot"
     fi
 
-    # 2. fingerprint + security patch (Pixel Canary via autopif4)
-    if [ -f "$MODDIR/autopif4.sh" ]; then
-        sh "$MODDIR/autopif4.sh" -s -m 2>&1 | log -t "AlwaysStrong-boot"
+    # 2. fingerprint + security patch (Pixel Canary via autopif)
+    if [ -f "$MODDIR/autopif.sh" ]; then
+        sh "$MODDIR/autopif.sh" -s -m 2>&1 | log -t "AlwaysStrong-boot"
     fi
 
     # 2b. sync the attestation/system security patch to the fresh fingerprint
@@ -224,7 +224,7 @@ fi
 
 # --- Hourly refresh (fingerprint + keybox, each toggle-able from WebUI) --
 # WebUI writes flag files into /data/adb/tricky_store/ to opt OUT:
-#   no_auto_fp      -> skip the autopif4 refresh
+#   no_auto_fp      -> skip the autopif refresh
 #   no_auto_keybox  -> skip the keybox fetch
 # Keybox-only restarts PI when it actually changed (exit 0); fingerprint
 # updates are picked up naturally on the next PI invocation, so we don't
@@ -241,8 +241,8 @@ fi
         esac
         [ "$INT" -lt 60 ] && INT=60
         sleep "$INT"
-        if [ ! -f "$CFG/no_auto_fp" ] && [ -f "$MODDIR/autopif4.sh" ]; then
-            sh "$MODDIR/autopif4.sh" -s -m 2>&1 | log -t "AlwaysStrong-hourly"
+        if [ ! -f "$CFG/no_auto_fp" ] && [ -f "$MODDIR/autopif.sh" ]; then
+            sh "$MODDIR/autopif.sh" -s -m 2>&1 | log -t "AlwaysStrong-hourly"
             [ -f "$MODDIR/sync_patch.sh" ] && sh "$MODDIR/sync_patch.sh" 2>&1 | log -t "AlwaysStrong-hourly"
         fi
         if [ ! -f "$CFG/no_auto_keybox" ] && [ -x "$MODDIR/keybox_fetch.sh" ]; then
