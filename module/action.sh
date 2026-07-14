@@ -86,10 +86,15 @@ if [ -f "$CONFIG_DIR/custom_keybox" ]; then
 elif [ -x "$MODPATH/keybox_fetch.sh" ]; then
     if [ -s "$CONFIG_DIR/keybox.xml" ] && head -c 4096 "$CONFIG_DIR/keybox.xml" | grep -q "Keybox"; then
         sh "$MODPATH/keybox_fetch.sh" >/dev/null 2>&1 &
-        KB_PID=$!
         row "🔑" "密钥正常"
     else
-        sh "$MODPATH/keybox_fetch.sh" >/dev/null 2>&1
+        sh "$MODPATH/keybox_fetch.sh" >/dev/null 2>&1 &
+        row "⌛" "下载密钥中..."
+        i=0
+        while [ $i -lt 10 ]; do
+            [ -s "$CONFIG_DIR/keybox.xml" ] && break
+            sleep 1; i=$((i+1))
+        done
         if [ -s "$CONFIG_DIR/keybox.xml" ] && head -c 4096 "$CONFIG_DIR/keybox.xml" | grep -q "Keybox"; then
             row "🔑" "密钥已更新"
         else
