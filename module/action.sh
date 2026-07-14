@@ -31,21 +31,25 @@ row "⏳" "initializing, please wait"
 echo "  $LINE"
 
 # --- target.txt + keybox (silent) ----------------------------------------
-# build_target_txt rewrites target.txt every tap: all user apps (pm -3) +
-# installed OEM wallet/store apps + forced GMS/GSF/Vending. Count what landed.
-[ -x "$MODPATH/build_target_txt.sh" ] && \
-    sh "$MODPATH/build_target_txt.sh" "$CONFIG_DIR/target.txt" >/dev/null 2>&1
+# build_target_txt rewrites target.txt every tap: reads persisted mode from
+# CONFIG_DIR/target_mode, applies suffix accordingly. Count what landed.
+if [ -x "$MODPATH/build_target_txt.sh" ]; then
+    TGT_MODE=$(tr -d '\r' < "$CONFIG_DIR/target_mode" 2>/dev/null)
+    case "$TGT_MODE" in
+        auto|force|certchain) ;;
+        *) TGT_MODE="auto" ;;
+    esac
+    sh "$MODPATH/build_target_txt.sh" --mode "$TGT_MODE" "$CONFIG_DIR/target.txt" >/dev/null 2>&1
+fi
 TGT_N=$(grep -cvE '^[[:space:]]*$' "$CONFIG_DIR/target.txt" 2>/dev/null)
-# Keybox: if we already hold a valid one, refresh it in the BACKGROUND so a
-# slow or unreachable mirror can't stall the Action (some networks reach
-# Google fine but not the keybox host). With no keybox yet, fetch synchronously
-# (still bounded by keybox_fetch's own wget timeout) because STRONG needs it now.
+# Keybox: always fetch in BACKGROUND. The synchronous path could block the
+# Action for 30+ seconds on a slow mirror, making the user think the whole
+# flow is frozen at "initializing". Background fetch writes to a temp pid
+# file so the summary section can report "downloading" instead of "missing".
+KB_PID=""
 if [ -x "$MODPATH/keybox_fetch.sh" ]; then
-    if [ -s "$CONFIG_DIR/keybox.xml" ] && head -c 4096 "$CONFIG_DIR/keybox.xml" | grep -q "Keybox"; then
-        sh "$MODPATH/keybox_fetch.sh" >/dev/null 2>&1 &
-    else
-        sh "$MODPATH/keybox_fetch.sh" >/dev/null 2>&1
-    fi
+    sh "$MODPATH/keybox_fetch.sh" >/dev/null 2>&1 &
+    KB_PID=$!
 fi
 
 # --- autopif: fetch a fresh Pixel fingerprint from Google ----------------
@@ -116,10 +120,10 @@ dl_to() {
 WEBUI_MSG=""
 if [ -d /data/adb/magisk ] && [ "$KSU" != "true" ] && [ "$APATCH" != "true" ]; then
     PKG=io.github.a13e300.ksuwebui
-    [ -n "$(find "$CONFIG_DIR/.webui_busy" -mmin +5 2>/dev/null)" ] && rm -f "$CONFIG_DIR/.webui_busy" 2>/dev/null
-    if ! pm path "$PKG" >/dev/null 2>&1 && [ ! -f "$CONFIG_DIR/.webui_busy" ]; then
+    [ -n "$(find "$MODPATH/.webui_busy" -mmin +5 2>/dev/null)" ] && rm -f "$MODPATH/.webui_busy" 2>/dev/null
+    if ! pm path "$PKG" >/dev/null 2>&1 && [ ! -f "$MODPATH/.webui_busy" ]; then
         WEBUI_MSG="📲|installing WebUI app (background)"
-        : > "$CONFIG_DIR/.webui_busy"
+        : > "$MODPATH/.webui_busy"
         {
             T=/data/local/tmp/.aswebui.apk
             API="https://api.github.com/repos/KOWX712/KsuWebUIStandalone/releases/latest"
@@ -130,7 +134,7 @@ if [ -d /data/adb/magisk ] && [ "$KSU" != "true" ] && [ "$APATCH" != "true" ]; t
                 chmod 644 "$T" 2>/dev/null
                 pm install -r "$T" >/dev/null 2>&1
             fi
-            rm -f "$T" "$CONFIG_DIR/.webui_busy" 2>/dev/null
+            rm -f "$T" "$MODPATH/.webui_busy" 2>/dev/null
         } &
     fi
 fi
@@ -147,6 +151,8 @@ fi
 
 # --- summary -------------------------------------------------------------
 pick_pif() {
+    for f in "$CONFIG_DIR/custom.pif.prop" "$MODPATH/custom.pif.prop" \
+             "$CONFIG_DIR/pif.prop" "$MODPATH/pif.prop"; do
         [ -s "$f" ] && { echo "$f"; return 0; }
     done
     return 1
@@ -165,8 +171,18 @@ else
 fi
 
 KB="$CONFIG_DIR/keybox.xml"
+# Wait up to 10 s for the background keybox fetch. autopif already gave it
+# 60+ s head start, so in practice this is almost always instant.
+if [ -n "$KB_PID" ] && kill -0 "$KB_PID" 2>/dev/null; then
+    i=0
+    while kill -0 "$KB_PID" 2>/dev/null && [ "$i" -lt 10 ]; do
+        sleep 1; i=$((i + 1))
+    done
+fi
 if [ -s "$KB" ] && head -c 4096 "$KB" | grep -q "Keybox"; then
     row "🔑" "keybox ok"
+elif [ -n "$KB_PID" ] && kill -0 "$KB_PID" 2>/dev/null; then
+    row "⏳" "keybox downloading..."
 else
     row "⚠️" "keybox missing"
 fi
