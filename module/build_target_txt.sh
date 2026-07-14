@@ -1,21 +1,59 @@
 #!/system/bin/sh
-# Build /data/adb/tricky_store/target.txt from:
-#   1. user-installed packages (`pm list packages -3`) -- auto mode
-#   2. a small curated OEM-app list (Samsung Pay etc.) -- auto, included only
-#      if actually installed on this device
-#   3. Play Store / Play Services / Play Services Framework -- forced live (`!`)
-#      because GMS/GSF/Vending must use the hardware keybox to ever reach
-#      STRONG; auto mode here will silently downgrade to software when TEE
-#      fails and that's the most common "why is my keybox not working" cause.
+# Build /data/adb/tricky_store/target.txt from all installed packages.
+#
+# Modes (set via --mode or /data/adb/tricky_store/target_mode):
+#   auto       – user/OEM apps get no suffix; GMS/GSF/Vending get `!` (default)
+#   force      – ALL packages get `!` suffix (hardware keybox for everything)
+#   certchain  – ALL packages get `?` suffix (modified cert chain)
 #
 # Usage:
-#   sh build_target_txt.sh /data/adb/tricky_store/target.txt
+#   sh build_target_txt.sh [--mode auto|force|certchain] [output_path]
 #
-# Anything not in this seed gets auto-added by the ta-enhanced inotify daemon
-# at runtime (PackageManager watcher), so this script's job is the initial
-# seed and the periodic action-button rebuild only.
+# The aswatcher inotify daemon auto-adds newly installed packages at runtime;
+# this script produces the initial seed and the periodic Action-tap rebuild.
 
-TGT="${1:-/data/adb/tricky_store/target.txt}"
+# POSIX-portable "last argument" extraction (${@: -1} is bash-only)
+for last; do :; done
+TGT="${last:-/data/adb/tricky_store/target.txt}"
+case "$TGT" in
+    --mode) TGT="/data/adb/tricky_store/target.txt" ;;
+    /*) ;;
+    *) TGT="/data/adb/tricky_store/target.txt" ;;
+esac
+
+# --- resolve mode: CLI arg > config file > default (auto)
+MODE="auto"
+CFG_MODE="/data/adb/tricky_store/target_mode"
+# Consume --mode <val> in one pass: peek at arg after --mode, set MODE, skip val
+has_explicit_mode=0
+skip_next=0
+for arg in "$@"; do
+    [ "$skip_next" = 1 ] && { skip_next=0; continue; }
+    case "$arg" in
+        --mode)
+            skip_next=1
+            has_explicit_mode=1
+            ;;
+        auto|force|certchain)
+            MODE="$arg"
+            ;;
+    esac
+done
+# Strip CR from persisted config (handles Windows-line-ending edits via adb)
+if [ "$has_explicit_mode" -eq 0 ] && [ -f "$CFG_MODE" ]; then
+    MODE=$(tr -d '\r' < "$CFG_MODE" 2>/dev/null)
+    case "$MODE" in
+        auto|force|certchain) ;;
+        *) MODE="auto" ;;
+    esac
+fi
+
+# Resolve suffix from mode
+case "$MODE" in
+    force)     SUFFIX="!" ;;
+    certchain) SUFFIX="?" ;;
+    *)         SUFFIX=""  ;;
+esac
 
 # Bail out early if pm is unreachable -- keep existing target.txt as-is.
 pm list packages >/dev/null 2>&1 || exit 1
@@ -39,9 +77,13 @@ com.oneplus.opbackup
 com.oplus.wallet
 com.google.android.apps.walletnfcrel
 com.google.android.apps.nbu.paisa.user
+com.oplus.deepthinker
+com.heytap.speechassist
+com.coloros.sceneservice
 "
 
-# Forced live -- always !, never downgrade.
+# GMS/GSF/Vending — in auto mode they always get `!` (hardware keybox needed
+# for STRONG); in force/certchain mode they get the same suffix as everything else.
 FORCED_LIST="
 com.android.vending
 com.google.android.gms
@@ -51,11 +93,8 @@ com.google.android.gsf
 is_installed() { printf '%s\n' "$ALL" | grep -Fxq "$1"; }
 
 {
-    # User installs (`-3`). This skips system apps including system-updated
-    # GMS/GSF/Vending, which is why the FORCED_LIST below explicitly re-adds
-    # them with the ! flag. Filter the 3 forced names defensively in case a
-    # weird ROM ever surfaces them through `-3` -- we don't want both a
-    # `foo` and a `foo!` line for the same package.
+    # User installs (`-3`). Filter the forced names defensively in case a
+    # weird ROM ever surfaces them through `-3`.
     pm list packages -3 2>/dev/null \
         | sed 's/^package://' \
         | grep -Fxv -e com.android.vending \
@@ -63,10 +102,33 @@ is_installed() { printf '%s\n' "$ALL" | grep -Fxq "$1"; }
                     -e com.google.android.gsf
 
     for p in $OEM_LIST; do
-        is_installed "$p" && echo "$p"
+        is_installed "$p" && printf '%s\n' "$p"
     done
 
     for p in $FORCED_LIST; do
-        is_installed "$p" && echo "${p}!"
+        if is_installed "$p"; then
+            if [ -n "$SUFFIX" ] && [ "$MODE" != "auto" ]; then
+                printf '%s%s\n' "$p" "$SUFFIX"
+            else
+                printf '%s!\n' "$p"
+            fi
+        fi
     done
-} | sort -u > "${TGT}.tmp" && mv -f "${TGT}.tmp" "$TGT"
+} | while read -r pkg; do
+    [ -z "$pkg" ] && continue
+    # In force/certchain mode, append suffix to every non-forced package
+    case "$pkg" in
+        *[!?]) printf '%s\n' "$pkg" ;;
+        *)
+            if [ "$MODE" = "force" ] || [ "$MODE" = "certchain" ]; then
+                printf '%s%s\n' "$pkg" "$SUFFIX"
+            else
+                printf '%s\n' "$pkg"
+            fi
+            ;;
+    esac
+done | sort -u > "${TGT}.tmp" && mv -f "${TGT}.tmp" "$TGT"
+
+# Persist mode choice so WebUI reads it back
+mkdir -p /data/adb/tricky_store 2>/dev/null
+printf '%s\n' "$MODE" > "$CFG_MODE" 2>/dev/null
