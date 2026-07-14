@@ -32,6 +32,32 @@ for proc in TEESimulator supervisor daemon ta-enhanced; do
 done
 pkill -9 -f TEESimulator 2>/dev/null || true
 
+# --- Zygisk implementation detection (Specter-style) ----------------------
+ZYGISK_IMPL="none"
+ZYGISK_DETAIL=""
+if [ -d /data/adb/modules/zygisksu ]; then
+  ZYGISK_IMPL="Zygisk Next"
+  ZYGISK_DETAIL="(built-in Zygisk)"
+elif grep -q "ro.dalvik.vm.native.bridge=zygisk" /data/adb/modules/*/service.sh 2>/dev/null; then
+  ZYGISK_IMPL="ReZygisk"
+  ZYGISK_DETAIL="(standalone)"
+elif [ -d /data/adb/modules/zygisk_shamiko ] || [ -d /data/adb/modules/riru_edxposed ]; then
+  ZYGISK_IMPL="Magisk built-in"
+  ZYGISK_DETAIL=""
+elif [ "$KSU" = true ]; then
+  # KSU with built-in Zygisk support (v1.0+)
+  if [ -f /data/adb/ksud/ksud ] && /data/adb/ksud/ksud module list 2>/dev/null | grep -q "zygisksu"; then
+    ZYGISK_IMPL="KSU Zygisk Next"
+    ZYGISK_DETAIL="(KSU native)"
+  else
+    ZYGISK_IMPL="none"
+    ZYGISK_DETAIL="(Zygisk-less KSU — PIF won't work)"
+  fi
+fi
+ui_print ""
+ui_print "Zygisk: $ZYGISK_IMPL $ZYGISK_DETAIL"
+ui_print ""
+
 # --- conflict cleanup (19 known modules) ---------------------------------
 CONFLICTS=0
 for c in \
