@@ -1,8 +1,11 @@
 #!/bin/sh
 
 PATH=/data/adb/ap/bin:/data/adb/ksu/bin:/data/adb/magisk:/data/data/com.termux/files/usr/bin:$PATH
-MODDIR=/data/adb/modules/tricky_store
-version=$(grep "^version=" $MODDIR/module.prop | sed 's/version=//g')
+SELF_DIR=$(cd "${0%/*}" 2>/dev/null && pwd)
+[ -z "$SELF_DIR" ] && SELF_DIR=/data/adb/modules/tricky_store
+MODDIR="$SELF_DIR"
+version=$(grep "^version=" $MODDIR/module.prop 2>/dev/null | sed 's/version=//g')
+[ -z "$version" ] && version="?"
 
 . $MODDIR/common_func.sh
 
@@ -13,6 +16,7 @@ TEMPDIR="$MODDIR/temp" #fallback
 [ -w /dev ] && TEMPDIR="/dev/playintegrityfix"
 mkdir -p "$TEMPDIR"
 cd "$TEMPDIR"
+trap 'rm -rf "$TEMPDIR"' EXIT INT TERM
 
 echo "[+] PlayIntegrityFix $version"
 echo "[+] $(basename "$0")"
