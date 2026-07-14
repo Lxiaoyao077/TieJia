@@ -91,7 +91,9 @@ delprop_if_exist ro.build.user 2>/dev/null || true
 delprop_if_exist ro.build.host 2>/dev/null || true
 
 # Magic overlay props — hide from Magisk/KSU overlays detection
-delprop_if_exist ro.dalvik.vm.native.bridge 2>/dev/null || true
+# NOTE: ro.dalvik.vm.native.bridge must NOT be deleted — it is set
+# by Zygisk Next / Riru for zygote injection. Deleting it breaks Zygisk.
+# Instead, we reset it to a safe value only if it's empty or clearly wrong.
 
 # --- LineageOS prop scrub (hide derivative-ROM markers from PI checks) ---
 LV=$(getprop ro.product.vendor.name 2>/dev/null)
