@@ -382,7 +382,9 @@ bold "==> Patching security_patch.sh: system.prop -> CONFIG_DIR"
 
 # 6b) Patch PIF autopif.sh: use CONFIG_DIR for TEMPDIR fallback instead of MODDIR/temp
 #     (KSU tamper: any directory/file created inside MODPATH may trigger tamper)
-"${SED_I[@]}" 's|TEMPDIR="$MODDIR/temp"|TEMPDIR="/data/adb/tricky_store/.autopif_tmp"|g' "$STAGE/autopif.sh"
+"${SED_I[@]}" 's|TEMPDIR="$MODDIR/temp"|TEMPDIR="/data/adb/tricky_store/.autopif_tmp"|g
+# 6c) Ensure autopif.sh announces itself to PIF zygisk as the pif handler
+"${SED_I[@]}" 's|echo "\[+\] PlayIntegrityFix|touch /data/adb/pif_script_only 2>/dev/null\n&|' "$STAGE/autopif.sh"' "$STAGE/autopif.sh"
 
 
 
