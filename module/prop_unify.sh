@@ -62,39 +62,26 @@ while IFS='=' read -r key val; do
   esac
 done < "$PIF"
 
-# If FINGERPRINT is set, parse it to extract brand/product/device/model
-# Format: brand/product:user/release/ID/incremental:userdebug/test-keys
+# If FINGERPRINT is set, parse it to extract brand/product/device
+# Format: brand/product/device:user/release_version/id/incremental:userdebug/test-keys
 # Example: google/caiman_beta/caiman:15/BP11.241121.013/13016754:user/release-keys
 if [ -n "$FINGERPRINT" ]; then
-  # Extract brand/product from fingerprint (before the first /)
+  # Parse: brand / product / device:tag ...
   FP_BRAND="${FINGERPRINT%%/*}"
-  FP_REST="${FINGERPRINT#*/}"
-  FP_PRODUCT="${FP_REST%%/*}"
-  FP_REST="${FP_REST#*/}"
-  FP_REST="${FP_REST#*:}"       # skip "shiba:user"
-  FP_DEVICE="${FP_REST%%/*}"    # device is between the two slashes after :
-  # Actually fingerprint format: brand/product:user/release/ID/incremental:userdebug/test-keys
-  # Let's parse more carefully
-  FP_BRAND="${FINGERPRINT%%/*}"
-  AFTER_BRAND="${FINGERPRINT#*/}"
-  FP_PRODUCT="${AFTER_BRAND%%/*}"
+  AFTER_BRAND="${FINGERPRINT#*/}"      # product/device:user/...
+  FP_PRODUCT="${AFTER_BRAND%%/*}"       # product (caiman_beta)
+  AFTER_PRODUCT="${AFTER_BRAND#*/}"     # device:user/...
+  FP_DEVICE_TMP="${AFTER_PRODUCT%%:*}"  # device (caiman or caiman_beta depending on format)
+  FP_DEVICE="${FP_DEVICE_TMP%%/*}"      # strip any trailing / if present
 
-  # Device is the first part after the first colon — after ":user/" or ":userdebug/"
-  # fingerprint = brand/product:user/release/ID/incremental:userdebug/test-keys
-  # The device is the next segment after PRODUCT
-  # Actually: brand/product/device:user/...
-  # Let's re-parse: brand/product_name:user_or_userdebug
-  AFTER_SLASH="${FINGERPRINT#*/}"     # product/device:user/release...
-  FP_PRODUCT="${AFTER_SLASH%%/*}"     # product_name (before /)
-  AFTER_PRODUCT="${AFTER_SLASH#*/}"   # device:user/release...
-  # device is everything before the first colon in AFTER_PRODUCT
-  # But for Pixel: "caiman:user/..." or "caiman_beta:user/..."
-  FP_DEVICE_TMP="${AFTER_PRODUCT%%:*}"
-  FP_DEVICE="${FP_DEVICE_TMP%%/*}"   # in case there's a / in device name
+  # Build type from fingerprint (user/userdebug/eng)
+  FP_BUILD_TYPE="user"
+  case "$FINGERPRINT" in
+    *:userdebug/*) FP_BUILD_TYPE="userdebug" ;;
+    *:eng/*)       FP_BUILD_TYPE="eng" ;;
+  esac
 
-  # The actual device might have variant suffix — use what pif says
-  # For Pixel fingerprint, the device in "product/device:user/..." is the codename
-  # Fall back to explicit DEVICE from pif.prop if available
+  # If pif.prop has explicit overrides, use those
   [ -n "$DEVICE" ] && FP_DEVICE="$DEVICE"
   [ -n "$PRODUCT" ] && FP_PRODUCT="$PRODUCT"
   [ -n "$BRAND" ] && FP_BRAND="$BRAND"
@@ -130,15 +117,25 @@ if [ -n "$FINGERPRINT" ]; then
     set_prop ro.product.manufacturer "$MANUFACTURER"
   fi
 
-  # Apply build description (construct from fingerprint)
+  # Apply build description — construct from fingerprint fields
+  # Format: "product-build_type release_version id incremental build_tags"
+  # Derived from: brand/product/device:build_type/release/id/incremental:userdebug/tags
   if [ -n "$FINGERPRINT" ]; then
-    # Extract build description: everything after the first colon?
-    # Description format: "caiman-user 15 BP11.241121.013 13016754 release-keys"
-    AFTER_COLON="${FINGERPRINT#*:}"
-    DEVICE_PART="${FINGERPRINT%%/*}"
-    # Actually: brand/product/device:user/release/ID/incremental:userdebug/test-keys
-    # for description, remove :user/... part
-    set_prop ro.build.description "${FINGERPRINT%%:*}"
+    # Extract fields: after "device:build_type/" we have "release/id/incremental:userdebug/tags"
+    AFTER_COLON="${FINGERPRINT#*:}"                              # build_type/release/id/incremental:userdebug/tags
+    FP_BT="${AFTER_COLON%%/*}"                                    # build_type (user/userdebug)
+    AFTER_TYPE="${AFTER_COLON#*/}"                                # release/id/incremental:userdebug/tags
+    FP_RELEASE="${AFTER_TYPE%%/*}"                                # release (e.g. 15)
+    AFTER_RELEASE="${AFTER_TYPE#*/}"                              # id/incremental:userdebug/tags
+    FP_ID="${AFTER_RELEASE%%/*}"                                  # id (e.g. BP11.241121.013)
+    AFTER_ID="${AFTER_RELEASE#*/}"                                # incremental:userdebug/tags
+    FP_INCREMENTAL="${AFTER_ID%%:*}"                              # incremental (e.g. 13016754)
+    REMAINDER="${AFTER_ID#*:}"                                    # userdebug/tags
+    FP_TAGS="${REMAINDER#*/}"                                     # tags (release-keys)
+    [ "$FP_TAGS" = "$REMAINDER" ] && FP_TAGS="${REMAINDER##*:}"  # fallback
+
+    BUILD_DESC="${FP_PRODUCT}-${FP_BT} ${FP_RELEASE} ${FP_ID} ${FP_INCREMENTAL} ${FP_TAGS}"
+    set_prop ro.build.description "$BUILD_DESC"
   fi
 
   # Security patch
@@ -170,11 +167,11 @@ if [ -n "$FINGERPRINT" ]; then
   del_prop ro.product.system_ext.device 2>/dev/null
   del_prop ro.product.system_ext.name 2>/dev/null
 
-  # Build tags and type
-  set_prop ro.build.tags "release-keys"
-  set_prop ro.build.type "user"
-  set_prop ro.system.build.tags "release-keys"
-  set_prop ro.system.build.type "user"
+  # Build tags and type — use fingerprint-derived values
+  set_prop ro.build.tags "${FP_TAGS:-release-keys}"
+  set_prop ro.build.type "${FP_BUILD_TYPE:-user}"
+  set_prop ro.system.build.tags "${FP_TAGS:-release-keys}"
+  set_prop ro.system.build.type "${FP_BUILD_TYPE:-user}"
 fi
 
 log "prop unification complete"
