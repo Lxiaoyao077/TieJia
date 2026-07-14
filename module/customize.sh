@@ -134,6 +134,10 @@ fi
 
 # --- /data/adb/tricky_store config ----------------------------------------
 mkdir -p "$CONFIG_DIR"
+
+# Tell PIF zygisk NOT to auto-generate pif.prop (handled by autopif.sh)
+touch /data/adb/pif_script_only 2>/dev/null
+
 if [ -f "$CONFIG_DIR/keybox.xml" ]; then
   ui_print "keybox kept ($(wc -c < "$CONFIG_DIR/keybox.xml") bytes)"
 else
