@@ -8,6 +8,23 @@ unset ASH_STANDALONE
 
 [ -f "$MODDIR/common_func.sh" ] && . "$MODDIR/common_func.sh"
 
+# Resolve sed with -i support — toybox sed (AOSP default) lacks -i,
+# so we fall back to busybox sed which always supports it.
+SED="sed -i"
+for bb in /data/adb/magisk/busybox /data/adb/ksu/bin/busybox /data/adb/ap/bin/busybox; do
+    if [ -x "$bb" ]; then SED="$bb sed -i"; break; fi
+done
+
+# Private log — persist.log.tag.* suppresses logd output, so we tee to disk.
+LOG_FILE="$MODDIR/logs/module.log"
+log_save() {
+  local tag="$1"; shift
+  local ts=$(date '+%m-%d %H:%M:%S' 2>/dev/null)
+  echo "[$ts] $*" >> "$LOG_FILE" 2>/dev/null
+  echo "$*" | log -t "$tag"
+  tail -n 200 "$LOG_FILE" > "$LOG_FILE.tmp" 2>/dev/null && mv "$LOG_FILE.tmp" "$LOG_FILE" 2>/dev/null
+}
+
 # --- Logcat leak prevention (early) ---
 if [ -x "$MODDIR/logcat_cleanup.sh" ]; then
     sh "$MODDIR/logcat_cleanup.sh" >/dev/null 2>&1 &
@@ -273,7 +290,7 @@ if [ ! -f "$CONFIG_DIR/.bootstrapped" ]; then
                   "spoofProps=1" "spoofSignature=0" "spoofVendingSdk=0"; do
             k="${kv%=*}"; v="${kv#*=}"
             if grep -qE "^${k}=" "$CPIF"; then
-                sed -i "s|^${k}=.*|${k}=${v}|" "$CPIF"
+                $SED "s|^${k}=.*|${k}=${v}|" "$CPIF"
             else
                 echo "${k}=${v}" >> "$CPIF"
             fi
