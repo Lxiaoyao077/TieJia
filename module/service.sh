@@ -255,9 +255,9 @@ if [ ! -f "$CONFIG_DIR/.bootstrapped" ]; then
         sh "$MODDIR/keybox_fetch.sh" 2>&1 | log -t "AlwaysStrong-boot"
     fi
 
-    # 2. fingerprint + security patch (Pixel Canary via autopif)
-    if [ -f "$MODDIR/autopif.sh" ]; then
-        sh "$MODDIR/autopif.sh" -s -m 2>&1 | log -t "AlwaysStrong-boot"
+    # 2. fingerprint + security patch (Pixel Canary via pif_native_fetch)
+    if [ -x "$MODDIR/pif_native_fetch.sh" ]; then
+        sh "$MODDIR/pif_native_fetch.sh" -s -m 2>&1 | log -t "AlwaysStrong-boot"
     fi
 
     # 2b. sync the attestation/system security patch to the fresh fingerprint
@@ -317,8 +317,8 @@ fi
         esac
         [ "$INT" -lt 60 ] && INT=60
         sleep "$INT"
-        if [ ! -f "$CFG/no_auto_fp" ] && [ -f "$MODDIR/autopif.sh" ]; then
-            sh "$MODDIR/autopif.sh" -s -m 2>&1 | log -t "AlwaysStrong-hourly"
+        if [ ! -f "$CFG/no_auto_fp" ] && [ -x "$MODDIR/pif_native_fetch.sh" ]; then
+            sh "$MODDIR/pif_native_fetch.sh" -s -m 2>&1 | log -t "AlwaysStrong-hourly"
             [ -f "$MODDIR/sync_patch.sh" ] && sh "$MODDIR/sync_patch.sh" 2>&1 | log -t "AlwaysStrong-hourly"
             [ -x "$MODDIR/prop_unify.sh" ] && MODPATH="$MODDIR" sh "$MODDIR/prop_unify.sh" 2>&1 | log -t "AlwaysStrong-unify"
         fi
