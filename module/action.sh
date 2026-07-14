@@ -55,7 +55,7 @@ echo "  $LINE"
 row "🛡️" "AlwaysStrong  ${VER}"
 echo "  $LINE"
 echo ""
-row "⏳" "initializing..."
+row "⏳" "初始化中..."
 sleep 3
 
 # --- Step 1: Target list ---
@@ -70,7 +70,7 @@ if [ -x "$MODPATH/build_target_txt.sh" ]; then
     sh "$MODPATH/build_target_txt.sh" --mode "$TGT_MODE" "$CONFIG_DIR/target.txt" >/dev/null 2>&1
 fi
 TGT_N=$(grep -cvE '^[[:space:]]*$' "$CONFIG_DIR/target.txt" 2>/dev/null)
-row "🎯" "${TGT_N:-0} apps > target"
+row "🎯" "${TGT_N:-0} 个应用 > 目标列表"
 sleep 1
 
 # --- Step 2: Keybox ---
@@ -78,26 +78,26 @@ sleep 1
 KB_PID=""
 if [ -f "$CONFIG_DIR/custom_keybox" ]; then
     if [ -s "$CONFIG_DIR/keybox.xml" ] && head -c 4096 "$CONFIG_DIR/keybox.xml" | grep -q "Keybox"; then
-        row "🔑" "custom keybox — skip fetch"
-        row "ℹ️" "disable in webui for auto"
+        row "🔑" "自定义密钥 — 跳过获取"
+        row "ℹ️" "在网页界面中关闭以自动获取"
     else
-        row "⚠️" "custom keybox not set"
+        row "⚠️" "未设置自定义密钥"
     fi
 elif [ -x "$MODPATH/keybox_fetch.sh" ]; then
     if [ -s "$CONFIG_DIR/keybox.xml" ] && head -c 4096 "$CONFIG_DIR/keybox.xml" | grep -q "Keybox"; then
         sh "$MODPATH/keybox_fetch.sh" >/dev/null 2>&1 &
         KB_PID=$!
-        row "🔑" "keybox ok"
+        row "🔑" "密钥正常"
     else
         sh "$MODPATH/keybox_fetch.sh" >/dev/null 2>&1
         if [ -s "$CONFIG_DIR/keybox.xml" ] && head -c 4096 "$CONFIG_DIR/keybox.xml" | grep -q "Keybox"; then
-            row "🔑" "keybox updated"
+            row "🔑" "密钥已更新"
         else
-            row "⚠️" "keybox missing"
+            row "⚠️" "密钥缺失"
         fi
     fi
 else
-    row "⚠️" "keybox fetch not available"
+    row "⚠️" "密钥获取不可用"
 fi
 sleep 1
 
@@ -121,7 +121,7 @@ if [ -x "$MODPATH/pif_native_fetch.sh" ]; then
 fi
 
 if [ "$FP_OK" = 0 ]; then
-    row "🔄" "trying with fallback"
+    row "🔄" "尝试备用方案..."
     sleep 1
 
     # Fallback A: autopif4 (PIF fork) — bounded to 10s.
@@ -150,9 +150,9 @@ if [ "$FP_OK" = 0 ]; then
 fi
 
 case "$FP_SRC" in
-    pif|native) row "🌐" "fingerprint ok" ;;
-    local)      row "🌐" "fingerprint ok (local)" ;;
-    *)          row "⚠️" "fingerprint failed" ;;
+    pif|native) row "🌐" "指纹正常" ;;
+    local)      row "🌐" "指纹正常 (本地)" ;;
+    *)          row "⚠️" "指纹获取失败" ;;
 esac
 sleep 1
 
@@ -224,7 +224,7 @@ fi
 
 # --- Done ---
 echo "  $LINE"
-row "✅" "done"
+row "✅" "完成"
 echo "  $LINE"
 echo ""
 echo "  $LINE"
