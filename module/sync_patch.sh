@@ -37,10 +37,11 @@ done
 # the keystore attestation in lock-step with the Build/* fingerprint PIF
 # spoofs. (The module-folder path it also checks no longer exists by design.)
 if [ -n "$SRC" ] && [ "$SRC" != "/data/adb/pif.prop" ]; then
-    if cp -f "$SRC" /data/adb/pif.prop 2>/dev/null; then
-        chmod 644 /data/adb/pif.prop 2>/dev/null
-    else
-        echo "sync_patch: WARNING: failed to copy $SRC to /data/adb/pif.prop" >&2
+    SRC_HASH=$(sha256sum "$SRC" 2>/dev/null | awk '{print tolower($1)}')
+    DST_HASH=""
+    [ -s "/data/adb/pif.prop" ] && DST_HASH=$(sha256sum "/data/adb/pif.prop" 2>/dev/null | awk '{print tolower($1)}')
+    if [ "$SRC_HASH" != "$DST_HASH" ]; then
+        cp -f "$SRC" /data/adb/pif.prop 2>/dev/null && chmod 644 /data/adb/pif.prop 2>/dev/null
     fi
 fi
 # fall back to whatever the device already reports
@@ -64,8 +65,7 @@ printf 'all=%s\n' "$DOT" > "$CONFIG_DIR/security_patch.txt"
 # --- 2. PIF wildcard prop: spoof ro.build/ro.vendor/ro.system .security_patch
 # A single `*.security_patch=<date>` line makes PIF's zygisk hook report the
 # patch consistently to every app (this is what GMS / Play Integrity reads).
-# Only write to CONFIG_DIR copy — never touch MODPATH files (KSU tamper detection).
-for pf in "$CONFIG_DIR/custom.pif.prop"; do
+for pf in "$MODPATH/custom.pif.prop" "$CONFIG_DIR/custom.pif.prop"; do
     [ -f "$pf" ] || continue
     if grep -qE '^[#]?\*\.security_patch=' "$pf"; then
         sed -i "s|^[#]\?\*\.security_patch=.*|*.security_patch=$DOT|" "$pf"
@@ -87,4 +87,3 @@ if [ "$MODE" = "boot" ] && command -v resetprop >/dev/null 2>&1; then
 fi
 
 echo "$DOT"
-

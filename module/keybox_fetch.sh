@@ -12,6 +12,14 @@
 #   2  no change (already up to date)
 #   1  fetch / verify failed (existing keybox preserved)
 
+case "$0" in
+    */*) MODPATH=$(cd "${0%/*}" 2>/dev/null && pwd) ;;
+    *)   MODPATH="$PWD" ;;
+esac
+[ -z "$MODPATH" ] && MODPATH="$PWD"
+
+[ -f "$MODPATH/common_func.sh" ] && . "$MODPATH/common_func.sh"
+
 BASE_URL="${KEYBOX_BASE_URL:-https://botkey.netlify.app}"
 KEY_URL="$BASE_URL/key"
 
@@ -30,34 +38,35 @@ fi
 # TLS stalls mid-stream on some CDNs (the keybox mirror included) even though
 # the same wget downloads from Google/GitHub fine — so curl-less devices can't
 # pull the keybox at all. asfetch speaks TLS 1.2/1.3 correctly on every ABI.
-MODPATH="${MODPATH:-/data/adb/modules/tricky_store}"
-[ -f "$MODPATH/common_func.sh" ] && . "$MODPATH/common_func.sh"
+SELF_DIR=$(cd "${0%/*}" 2>/dev/null && pwd)
+[ -z "$SELF_DIR" ] && SELF_DIR=/data/adb/modules/tricky_store
+case "$(uname -m)" in
+    aarch64)        ABI=arm64-v8a ;;
+    armv7*|armv8l)  ABI=armeabi-v7a ;;
+    x86_64)         ABI=x86_64 ;;
+    i?86)           ABI=x86 ;;
+    *)              ABI="" ;;
+esac
+ASFETCH="$SELF_DIR/bin/$ABI/asfetch"
 
-DL=$(resolve_fetcher -o 30)
+DL=""
+if [ -n "$ABI" ] && [ -x "$ASFETCH" ]; then
+    DL="$ASFETCH -T 30 -o"
+elif command -v curl >/dev/null 2>&1; then
+    DL="curl -fsSL --connect-timeout 10 --max-time 30 -o"
+elif command -v wget >/dev/null 2>&1; then
+    DL="wget -q -T 20 -O"
+else
+    for bb in /data/adb/magisk/busybox /data/adb/ksu/bin/busybox /data/adb/ap/bin/busybox; do
+        if [ -x "$bb" ]; then DL="$bb wget -q -T 20 -O"; break; fi
+    done
+fi
 [ -z "$DL" ] && { log "no fetcher available (asfetch/curl/wget/busybox) — cannot fetch."; exit 1; }
 
-B64DEC=""
-if echo dGVzdA== | base64 -d >/dev/null 2>&1; then
-    B64DEC="base64 -d"
-else
-    for bb in /data/adb/magisk/busybox /data/adb/ksu/bin/busybox /data/adb/ap/bin/busybox; do
-        if [ -x "$bb" ] && echo dGVzdA== | "$bb" base64 -d >/dev/null 2>&1; then
-            B64DEC="$bb base64 -d"; break
-        fi
-    done
-fi
+B64DEC=$(find_tool "base64 -d" "base64 -d" "dGVzdA==")
 [ -z "$B64DEC" ] && { log "no base64 decoder available."; exit 1; }
 
-SHA256=""
-if command -v sha256sum >/dev/null 2>&1; then
-    SHA256="sha256sum"
-else
-    for bb in /data/adb/magisk/busybox /data/adb/ksu/bin/busybox /data/adb/ap/bin/busybox; do
-        if [ -x "$bb" ] && echo x | "$bb" sha256sum >/dev/null 2>&1; then
-            SHA256="$bb sha256sum"; break
-        fi
-    done
-fi
+SHA256=$(find_tool "sha256sum" "sha256sum" "x")
 [ -z "$SHA256" ] && { log "no sha256sum available."; exit 1; }
 
 # ---- Fetch ----
@@ -106,4 +115,3 @@ chmod 600 "$TARGET"
 rm -f "$CONFIG_DIR/.keybox.sha256" 2>/dev/null
 log "$TARGET updated ($(wc -c < "$TARGET") bytes)."
 exit 0
-

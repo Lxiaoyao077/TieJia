@@ -89,52 +89,34 @@ if [ "$(getprop sys.boot_completed)" != "1" ]; then
     ui_print() { return; }
 fi
 
-# --- Shared ABI detection (ARM-only module) ---
-# Usage: get_abi_var VARNAME
-# Sets the named variable to "arm64-v8a" / "armeabi-v7a" / "" based on uname.
-get_abi() {
-    case "$(uname -m)" in
-        aarch64)       echo "arm64-v8a" ;;
-        armv7*|armv8l) echo "armeabi-v7a" ;;
-        *)             echo "" ;;
-    esac
-}
-
-# --- Shared fetch tool resolver (asfetch > curl > wget > busybox wget) ---
-# Usage: resolve_fetcher [-o] [timeout_sec]
-#   -o        : download mode (output to file), default is stdout mode
-#   timeout   : timeout in seconds (default 20)
-# Output on stdout: the command prefix to use (e.g. "/path/asfetch -T 20").
-resolve_fetcher() {
-    local mode="-" timeout=20
-    while [ $# -gt 0 ]; do
-        case "$1" in
-            -o) mode="-o"; shift ;;
-            *)  timeout="$1"; shift ;;
-        esac
-    done
-    local SELF_DIR; SELF_DIR=$(cd "${0%/*}" 2>/dev/null && pwd)
-    [ -z "$SELF_DIR" ] && SELF_DIR=/data/adb/modules/tricky_store
-    local ABI; ABI=$(get_abi)
-    if [ -n "$ABI" ] && [ -x "$SELF_DIR/bin/$ABI/asfetch" ]; then
-        echo "$SELF_DIR/bin/$ABI/asfetch -T $timeout $mode"
-        return
-    fi
-    if command -v curl >/dev/null 2>&1; then
-        if [ "$mode" = "-o" ]; then
-            echo "curl -fsSL --connect-timeout 10 --max-time $timeout -o"
-        else
-            echo "curl -fsSL --max-time $timeout"
+# find_tool <cmd> <subcmd> <test_expr>
+# Searches for a CLI tool (command or busybox subcommand).
+#   $1 — command name (e.g. "base64" / "sha256sum")
+#   $2 — busybox subcommand (same as $1 when cmd==subcmd)
+#   $3 — test expression piped to the tool (e.g. "echo dGVzdA==")
+# Prints the full invocation prefix (e.g. "base64 -d" or "/data/adb/magisk/busybox sha256sum")
+# Returns 0 on success, 1 if not found.
+find_tool() {
+    local cmd="$1" sub="$2" test_expr="${3:-}"
+    # System tool
+    if [ -n "$test_expr" ]; then
+        if printf '%s' "$test_expr" | $cmd >/dev/null 2>&1; then
+            printf '%s' "$cmd"; return 0
         fi
-        return
+    elif command -v "$cmd" >/dev/null 2>&1; then
+        printf '%s' "$cmd"; return 0
     fi
-    if command -v wget >/dev/null 2>&1; then
-        echo "wget -q -T $timeout -O -"
-        return
-    fi
+    # Busybox fallback
     for bb in /data/adb/magisk/busybox /data/adb/ksu/bin/busybox /data/adb/ap/bin/busybox; do
-        if [ -x "$bb" ]; then echo "$bb wget -q -T $timeout -O -"; return; fi
+        if [ -x "$bb" ]; then
+            if [ -n "$test_expr" ]; then
+                if printf '%s' "$test_expr" | "$bb" $sub >/dev/null 2>&1; then
+                    printf '%s %s' "$bb" "$sub"; return 0
+                fi
+            else
+                printf '%s %s' "$bb" "$sub"; return 0
+            fi
+        fi
     done
     return 1
 }
-
