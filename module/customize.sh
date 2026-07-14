@@ -65,7 +65,7 @@ for f in module.prop service.sh post-fs-data.sh action.sh \
          keybox_fetch.sh build_target_txt.sh status_fetch.sh description.txt \
          rom_spoof_block.sh conflict_scan.sh sync_patch.sh \
          autopif.sh security_patch.sh \
-         target.txt daemon ; do
+         daemon ; do
   install_file "$f" "$MODPATH"
 done
 
