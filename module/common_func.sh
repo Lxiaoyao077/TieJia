@@ -132,3 +132,40 @@ find_tool() {
     done
     return 1
 }
+
+# --- AlwaysStrong: find_sed (portable sed -i) ---
+# Resolves a sed binary with reliable -i support.
+# toybox sed (AOSP default) lacks -i; busybox sed always supports it.
+# Sets global $SED to e.g. "sed -i" or "/data/adb/magisk/busybox sed -i".
+find_sed() {
+  SED="sed -i"
+  for bb in /data/adb/magisk/busybox /data/adb/ksu/bin/busybox /data/adb/ap/bin/busybox; do
+    if [ -x "$bb" ]; then SED="$bb sed -i"; return 0; fi
+  done
+  return 1
+}
+
+# --- AlwaysStrong: log_save ---
+# Private log fallback: persist.log.tag.* may suppress logd output,
+# so we tee to $MODDIR/logs/module.log with restricted permissions.
+# Usage: log_save <tag> <message...>
+log_save() {
+  local tag="$1"; shift
+  local msg="$*"
+  local logf="${MODDIR:-$MODPATH}/logs/module.log"
+  local ts
+
+  mkdir -p "${MODDIR:-$MODPATH}/logs" 2>/dev/null
+
+  ts=$(date '+%m-%d %H:%M:%S' 2>/dev/null)
+  (
+    umask 077
+    echo "[$ts] $msg" >> "$logf" 2>/dev/null
+    # Rotate only when > 300 lines to avoid per-call overhead
+    if [ "$(wc -l < "$logf" 2>/dev/null)" -gt 300 ]; then
+      tail -n 200 "$logf" > "$logf.tmp" 2>/dev/null && mv -f "$logf.tmp" "$logf" 2>/dev/null
+    fi
+  )
+  # Also send to logd (may be suppressed)
+  echo "$msg" | log -t "$tag" 2>/dev/null
+}
