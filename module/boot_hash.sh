@@ -1,5 +1,5 @@
 #!/system/bin/sh
-# boot_hash.sh — zero-rejection boot hash priority chain for TieJia
+# boot_hash.sh — zero-rejection boot hash priority chain for TieJia v2.0.0
 #
 # Generates a reliable device identity hash for TEE key derivation.
 # Priority chain (first non-zero, non-trivial hash wins):
@@ -14,12 +14,13 @@
 # Exit 0: hash written to boot_hash.bin
 # Exit 1: all sources exhausted (should not happen with fallback)
 
-CONFIG_DIR="${TIEJIA_CONFIG_DIR:-/data/adb/tricky_store}"
+SELF_DIR="$(cd "${0%/*}" 2>/dev/null && pwd)"
+. "$SELF_DIR/common_func.sh"
+init_config
+
 OUT="$CONFIG_DIR/boot_hash.bin"
 SHA256="sha256sum"
-for bb in /data/adb/magisk/busybox /data/adb/ksu/bin/busybox /data/adb/ap/bin/busybox; do
-  [ -x "$bb" ] && SHA256="$bb sha256sum" && break
-done
+find_busybox && SHA256="$BB sha256sum"
 
 log() { echo "boot_hash: $*"; }
 is_zero() { [ -z "$1" ] || echo "$1" | grep -qE '^0+$'; }

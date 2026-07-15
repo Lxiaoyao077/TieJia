@@ -2,7 +2,7 @@
 # TieJia uninstall — clean every artifact we created.
 
 MODDIR=${0%/*}
-CONFIG_DIR="${TIEJIA_CONFIG_DIR:-/data/adb/tricky_store}"
+init_config
 
 # Source common helpers (verify_proc_name)
 [ -f "$MODDIR/common_func.sh" ] && . "$MODDIR/common_func.sh"

@@ -14,7 +14,7 @@
 #   2  no change / skipped (custom keybox active, or bundled up-to-date)
 #   1  all sources failed (existing keybox preserved)
 
-CONFIG_DIR="${TIEJIA_CONFIG_DIR:-/data/adb/tricky_store}"
+init_config
 TARGET="$CONFIG_DIR/keybox.xml"
 
 log() { echo "keybox_fetch: $*"; }

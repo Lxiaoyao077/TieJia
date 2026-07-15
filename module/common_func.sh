@@ -1,9 +1,14 @@
-# Shared helper functions for TieJia module scripts.
+#===========================================================================
+# TieJia v2.0.0 — Shared helper library (common_func.sh)
+#===========================================================================
 # Merged from PlayIntegrityFix v4.7-inject-s (download/download_fail/sleep_pause)
-# and TieJia enhancements (find_tool, delprop_if_exist, resetprop_hexpatch).
+# and TieJia enhancements.
+# v2.0.0 adds: init_config, require_root, config_get/set, log helpers.
 
 # === Global constants ===
 export TIEJIA_CONFIG_DIR=/data/adb/tricky_store
+export TIEJIA_VERSION=2
+export TIEJIA_VERSION_CODE=200
 
 # === Portable lowercase (busybox awk lacks tolower) ===
 # lowercase <string> — echoes lowercase version using tr.
@@ -326,3 +331,167 @@ log_save() {
   # Also send to logd (may be suppressed)
   echo "$msg" | log -t "$tag" 2>/dev/null
 }
+
+#===========================================================================
+# TieJia v2.0.0 — Phase E: Shared library convergence
+#===========================================================================
+
+# --- init_config ---
+# Unifies CONFIG_DIR across all scripts. Must be called after MODDIR/MODPATH
+# is available. Sets: CONFIG_DIR, CONFIG_FILE (the unified config).
+init_config() {
+  export CONFIG_DIR="${TIEJIA_CONFIG_DIR:-/data/adb/tricky_store}"
+  export CONFIG_FILE="$CONFIG_DIR/config"
+  export CFG="$CONFIG_DIR"  # backward-compat shorthand
+  mkdir -p "$CONFIG_DIR" 2>/dev/null
+}
+
+# --- require_root ---
+# Bail with error if not running as root.
+require_root() {
+  [ "$(id -u)" = "0" ] && return 0
+  echo "TieJia: root required" >&2
+  exit 1
+}
+
+# --- ensure_dir ---
+# Create directory (and parents) if missing.
+ensure_dir() { [ -d "$1" ] || mkdir -p "$1" 2>/dev/null; }
+
+# --- version_from_module_prop ---
+# Reads versionCode from $MODDIR/module.prop or $1. Echoes it, returns 0.
+version_from_module_prop() {
+  local mp="${1:-${MODDIR:-$MODPATH}/module.prop}"
+  [ -f "$mp" ] || return 1
+  grep -E '^versionCode=' "$mp" | cut -d= -f2
+}
+
+#===========================================================================
+# TieJia v2.0.0 — Phase B: Unified config system
+#===========================================================================
+# Replaces scattered flag files with a single key=value config at CONFIG_FILE.
+# Keyspace: fp_auto, fp_interval, kb_auto, kb_interval,
+#           daemon_mount_iso, daemon_proc_obf, daemon_prop_unify,
+#           daemon_boot_hash, daemon_rom_cleanup, daemon_boot_state,
+#           security_dmesg, security_se, log_level
+
+# Default config values (applied when key is absent).
+CONFIG_DEFAULTS="\
+fp_auto=1
+fp_interval=3600
+kb_auto=1
+kb_interval=3600
+daemon_mount_iso=1
+daemon_proc_obf=1
+daemon_prop_unify=1
+daemon_boot_hash=1
+daemon_rom_cleanup=1
+daemon_boot_state=1
+security_dmesg=1
+security_se=1
+log_level=info
+"
+
+# config_get <key> [default]
+# Reads a single key from CONFIG_FILE. Falls back to $2, then CONFIG_DEFAULTS,
+# then empty string.
+config_get() {
+  local key="$1" def="${2:-}"
+  local cf="${CONFIG_FILE:-${TIEJIA_CONFIG_DIR:-/data/adb/tricky_store}/config}"
+  local val
+
+  if [ -f "$cf" ]; then
+    val=$(grep -E "^${key}=" "$cf" 2>/dev/null | tail -1 | cut -d= -f2-)
+    [ -n "$val" ] && { echo "$val"; return 0; }
+  fi
+
+  # Try caller-supplied default
+  [ -n "$def" ] && { echo "$def"; return 0; }
+
+  # Try global defaults
+  val=$(echo "$CONFIG_DEFAULTS" | grep -E "^${key}=" | cut -d= -f2-)
+  [ -n "$val" ] && { echo "$val"; return 0; }
+
+  return 1
+}
+
+# config_get_bool <key> — returns 0 if truthy (1/true/yes/on), 1 otherwise.
+config_get_bool() {
+  local val
+  val=$(config_get "$@")
+  case "$val" in
+    1|true|yes|on|TRUE|YES|ON) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+# config_set <key> <value>
+# Writes key=value to CONFIG_FILE, atomically (via temp file + mv).
+config_set() {
+  local key="$1" val="$2"
+  local cf="${CONFIG_FILE:-${TIEJIA_CONFIG_DIR:-/data/adb/tricky_store}/config}"
+  ensure_dir "$(dirname "$cf")"
+
+  if [ -f "$cf" ] && grep -qE "^${key}=" "$cf" 2>/dev/null; then
+    # Replace existing key
+    sed -i "s|^${key}=.*|${key}=${val}|" "$cf" 2>/dev/null || {
+      # Busybox sed fallback
+      grep -vE "^${key}=" "$cf" > "${cf}.tmp" 2>/dev/null
+      echo "${key}=${val}" >> "${cf}.tmp"
+      mv -f "${cf}.tmp" "$cf"
+    }
+  else
+    echo "${key}=${val}" >> "$cf"
+  fi
+}
+
+# config_migrate — convert old flag files to unified config.
+# Idempotent: skips keys that already exist in CONFIG_FILE.
+config_migrate() {
+  local cf="${CONFIG_FILE:-${TIEJIA_CONFIG_DIR:-/data/adb/tricky_store}/config}"
+
+  # fp_auto: absence of no_auto_fp means enabled
+  if ! grep -qE '^fp_auto=' "$cf" 2>/dev/null; then
+    if [ -f "$CONFIG_DIR/no_auto_fp" ]; then
+      echo "fp_auto=0" >> "$cf"
+    else
+      echo "fp_auto=1" >> "$cf"
+    fi
+  fi
+
+  # kb_auto: absence of no_auto_keybox means enabled
+  if ! grep -qE '^kb_auto=' "$cf" 2>/dev/null; then
+    if [ -f "$CONFIG_DIR/no_auto_keybox" ]; then
+      echo "kb_auto=0" >> "$cf"
+    else
+      echo "kb_auto=1" >> "$cf"
+    fi
+  fi
+
+  # fp_interval / kb_interval: migrate from hourly_interval_sec
+  if [ -f "$CONFIG_DIR/hourly_interval_sec" ]; then
+    local iv
+    iv=$(cat "$CONFIG_DIR/hourly_interval_sec" 2>/dev/null)
+    grep -qE '^fp_interval=' "$cf" 2>/dev/null || echo "fp_interval=${iv:-3600}" >> "$cf"
+    grep -qE '^kb_interval=' "$cf" 2>/dev/null || echo "kb_interval=${iv:-3600}" >> "$cf"
+  fi
+
+  # Fill remaining defaults for any keys still absent
+  local k v
+  echo "$CONFIG_DEFAULTS" | while IFS='=' read -r k v; do
+    [ -z "$k" ] && continue
+    grep -qE "^${k}=" "$cf" 2>/dev/null || echo "${k}=${v}" >> "$cf"
+  done
+}
+
+#===========================================================================
+# TieJia v2.0.0 — Structured logging (replaces ad-hoc echo)
+#===========================================================================
+# Usage: tj_log <level> <msg>
+# Levels: DEBUG INFO WARN ERROR (uppercase convention for logcat)
+TJ_LOG_LEVEL="${TJ_LOG_LEVEL:-2}"  # 0=DEBUG 1=INFO 2=WARN 3=ERROR
+
+tj_debug() { [ "$TJ_LOG_LEVEL" -le 0 ] && echo "[TieJia:D] $*" >&2; return 0; }
+tj_info()  { [ "$TJ_LOG_LEVEL" -le 1 ] && echo "[TieJia:I] $*" >&2; return 0; }
+tj_warn()  { [ "$TJ_LOG_LEVEL" -le 2 ] && echo "[TieJia:W] $*" >&2; return 0; }
+tj_error() { echo "[TieJia:E] $*" >&2; return 0; }

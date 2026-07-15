@@ -11,7 +11,7 @@
 
 MODDIR="${MODPATH:-$(dirname "$0")}"
 [ -f "$MODDIR/common_func.sh" ] && . "$MODDIR/common_func.sh"
-CONFIG_DIR="${TIEJIA_CONFIG_DIR:-/data/adb/tricky_store}"
+init_config
 TARGET="$CONFIG_DIR/target.txt"
 BLACKLIST="$CONFIG_DIR/config/target_blacklist.txt"
 

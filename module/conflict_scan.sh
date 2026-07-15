@@ -1,5 +1,5 @@
 #!/system/bin/sh
-# conflict_scan.sh — runtime conflict scanner for TieJia
+# conflict_scan.sh — runtime conflict scanner for TieJia v2.0.0
 # Parses conflicts.txt (Specter-style declarative format) and acts on
 # each entry according to its type: aggressive / moderate / passive.
 #
@@ -8,7 +8,9 @@
 # Returns the number of modules that were newly handled this run.
 
 MODDIR="${MODPATH:-$(dirname "$0")}"
-CFG="${TIEJIA_CONFIG_DIR:-/data/adb/tricky_store}"
+SELF_DIR="$(cd "${0%/*}" 2>/dev/null && pwd)"
+. "$SELF_DIR/common_func.sh"
+init_config
 CONF_FILE="${CFG}/config/conflicts.txt"
 LOG_TAG="TieJia"
 

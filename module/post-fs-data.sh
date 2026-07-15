@@ -91,7 +91,7 @@ for PROP in ro.lineage.build.version ro.lineage.version ro.lineage.display.versi
 done
 
 # Disable ROM-level spoof engines (PixelPropsUtils / pihooks / entryhooks)
-# before GMS starts. Gated by /data/adb/tricky_store/no_rom_spoof_block flag.
+# before GMS starts. Gated by config key rom_cleanup_auto.
 if [ -x "$MODPATH/rom_spoof_block.sh" ]; then
     sh "$MODPATH/rom_spoof_block.sh" 2>/dev/null || true
 fi

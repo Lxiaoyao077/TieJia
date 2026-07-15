@@ -1,5 +1,5 @@
 #!/system/bin/sh
-# TieJia — primary fingerprint fetch.
+# TieJia v2.0.0 — primary fingerprint fetch.
 #
 # Unified fingerprint fetcher: replaces autopif.sh and pif_native_fetch.sh.
 # Crawls Google's Pixel build servers (developer.android.com → flash.android.com
@@ -16,82 +16,52 @@
 #   0  fresh fingerprint written
 #   1  crawl/parse failed (nothing written)
 
+SELF_DIR="$(cd "${0%/*}" 2>/dev/null && pwd)"
+. "$SELF_DIR/common_func.sh"
+init_config
+
 # ---- Parse flags (compatible with autopif.sh / autopif4.sh callers) ----
-# All three flags are effectively no-ops: this script already outputs STRONG-
-# friendly props and already does device matching. Kept for caller compatibility.
 FORCE_STRONG=1 FORCE_MATCH=1
 while [ $# -gt 0 ]; do
     case "$1" in
-        -s|--strong)   shift ;;   # STRONG-friendly (already default)
-        -m|--match)    shift ;;   # device matching (already default)
-        -a|--advanced) shift ;;   # advanced props (already default)
+        -s|--strong)   shift ;;
+        -m|--match)    shift ;;
+        -a|--advanced) shift ;;
         -l|--list)     LIST_ONLY=1; shift ;;
         -h|--help)     echo "pif_native_fetch.sh [-s] [-m] [-a] [-l]"; exit 0 ;;
         *) break ;;
     esac
 done
 
-CONFIG_DIR="${TIEJIA_CONFIG_DIR:-/data/adb/tricky_store}"
 TARGET="$CONFIG_DIR/pif.prop"
 TIMEOUT=10
 
 log() { echo "pif_native_fetch: $*"; }
 
-# ---- Resolve the module dir + asfetch binary ----
-SELF_DIR=$(cd "${0%/*}" 2>/dev/null && pwd)
-[ -z "$SELF_DIR" ] && SELF_DIR=/data/adb/modules/tricky_store
+# ---- Resolve ABI + fetcher binaries (via common_func) ----
+MODDIR="${SELF_DIR}"
+detect_abi || true
+load_proxy
 
-# ---- Load proxy config ----
-PROXY_HOST= PROXY_PORT= PROXY_AUTH=
-cf="${SELF_DIR}/config/proxy.conf"
-if [ -f "$cf" ]; then
-    PROXY_HOST=$(grep -E '^PROXY_HOST=' "$cf" 2>/dev/null | cut -d= -f2-)
-    PROXY_PORT=$(grep -E '^PROXY_PORT=' "$cf" 2>/dev/null | cut -d= -f2-)
-    PROXY_AUTH=$(grep -E '^PROXY_AUTH=' "$cf" 2>/dev/null | cut -d= -f2-)
-fi
-if [ -n "$PROXY_HOST" ] && [ -n "$PROXY_PORT" ]; then
-    if [ -n "$PROXY_AUTH" ]; then
-        export http_proxy="http://${PROXY_AUTH}@${PROXY_HOST}:${PROXY_PORT}"
-        export https_proxy="http://${PROXY_AUTH}@${PROXY_HOST}:${PROXY_PORT}"
-    else
-        export http_proxy="http://${PROXY_HOST}:${PROXY_PORT}"
-        export https_proxy="http://${PROXY_HOST}:${PROXY_PORT}"
-    fi
-    PROXY_ACTIVE=1
-    log "proxy enabled: ${PROXY_HOST}:${PROXY_PORT}"
-fi
-case "$(uname -m)" in
-    aarch64)        ABI=arm64-v8a ;;
-    armv7*|armv8l)  ABI=armeabi-v7a ;;
-    x86_64)         ABI=x86_64 ;;
-    i?86)           ABI=x86 ;;
-    *)              ABI="" ;;
-esac
-ASFETCH="$SELF_DIR/bin/$ABI/asfetch"
+# asfetch path (pif-specific: we need it even if fetch_url is used elsewhere)
+ASFETCH="${ABI_BIN_DIR:-$SELF_DIR/bin/$ABI_DIR}/asfetch"
 
-BB=""
-for p in /data/adb/modules/busybox-ndk/system/*/busybox /data/adb/magisk/busybox \
-         /data/adb/ksu/bin/busybox /data/adb/ap/bin/busybox; do
-    [ -f "$p" ] && BB="$p" && break
-done
+# ---- Busybox finder (via common_func) ----
+find_busybox || true
 
-if [ -z "$BB" ] && [ -z "$ABI" -o ! -x "$ASFETCH" ] \
-   && ! command -v curl >/dev/null 2>&1 && ! command -v wget >/dev/null 2>&1; then
-    log "no fetcher available (asfetch/curl/wget)."; exit 1
-fi
-
-# fetch OUTFILE URL [REFERER]  — REFERER is required by the flashstation API,
-# which is guarded by a referrer-restricted browser key. asfetch goes first (it
-# connects IPv4-first, so it works on every device incl. IPv6-only-DNS networks);
-# busybox wget / curl are fallbacks in case asfetch ever fails on a host.
+# fetch OUTFILE URL [REFERER] — REFERER required by flashstation API, guarded
+# by a referrer-restricted browser key. Uses common_func's fetch_url with
+# asfetch first (IPv4-first, works on IPv6-only-DNS networks), then curl/wget.
 fetch() {
     _o="$1"; _u="$2"; _ref="$3"
     # Minimum valid PIF JSON size is ~50 bytes; 16 bytes rejects 1-byte garbage
     _ok() { [ -s "$_o" ] && [ "$(wc -c < "$_o" 2>/dev/null)" -ge 16 ] && return 0; return 1; }
-    if [ -z "$PROXY_ACTIVE" ] && [ -n "$ABI" ] && [ -x "$ASFETCH" ]; then
+    # asfetch: skip if proxy env is set
+    if [ -z "${http_proxy:-}${ALL_PROXY:-}" ] && [ -n "${ABI_DIR:-}" ] \
+       && [ -x "${ABI_BIN_DIR:-}/asfetch" ]; then
         rm -f "$_o"
-        if [ -n "$_ref" ]; then "$ASFETCH" -T "$TIMEOUT" -H "Referer: $_ref" -o "$_o" "$_u" 2>/dev/null
-        else "$ASFETCH" -T "$TIMEOUT" -o "$_o" "$_u" 2>/dev/null; fi
+        if [ -n "$_ref" ]; then "${ABI_BIN_DIR}/asfetch" -T "$TIMEOUT" -H "Referer: $_ref" -o "$_o" "$_u" 2>/dev/null
+        else "${ABI_BIN_DIR}/asfetch" -T "$TIMEOUT" -o "$_o" "$_u" 2>/dev/null; fi
         _ok && return 0
     fi
     if command -v curl >/dev/null 2>&1; then
@@ -106,7 +76,7 @@ fetch() {
         else wget -q -T "$TIMEOUT" -O "$_o" "$_u" 2>/dev/null; fi
         _ok && return 0
     fi
-    if [ -n "$BB" ]; then
+    if [ -n "${BB:-}" ]; then
         rm -f "$_o"
         if [ -n "$_ref" ]; then "$BB" wget -q -T "$TIMEOUT" --header "Referer: $_ref" --no-check-certificate -O "$_o" "$_u" 2>/dev/null
         else "$BB" wget -q -T "$TIMEOUT" --no-check-certificate -O "$_o" "$_u" 2>/dev/null; fi
@@ -115,12 +85,10 @@ fetch() {
     return 1
 }
 
-# Prefer busybox grep/tac: toybox's `grep -A` (context lines) is unreliable on
-# some devices and returns nothing, which breaks the canary-block extraction.
-# autopif4 guards against the same broken-toybox-grep behaviour.
-if [ -n "$BB" ]; then GREP="$BB grep"; else GREP=grep; fi
+# Prefer busybox grep/tac: toybox's `grep -A` is unreliable
+if [ -n "${BB:-}" ]; then GREP="$BB grep"; else GREP=grep; fi
 reverse() { # portable `tac`
-    if [ -n "$BB" ]; then "$BB" tac
+    if [ -n "${BB:-}" ]; then "$BB" tac
     elif command -v tac >/dev/null 2>&1; then tac
     else sed '1!G;h;$!d'; fi
 }

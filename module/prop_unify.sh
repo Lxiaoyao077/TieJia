@@ -1,5 +1,5 @@
 #!/system/bin/sh
-# prop_unify.sh — unify ro.product.* props with spoofed fingerprint
+# prop_unify.sh — unify ro.product.* props with spoofed fingerprint — TieJia v2.0.0
 #
 # When autopif.sh changes ro.build.fingerprint to a Pixel Canary value,
 # the ro.product.* family (ro.product.manufacturer, ro.product.model,
@@ -11,9 +11,12 @@
 # This script reads the spoofed fingerprint from pif.prop and updates
 # all ro.product.* props to match.
 
+SELF_DIR="$(cd "${0%/*}" 2>/dev/null && pwd)"
+. "$SELF_DIR/common_func.sh"
+init_config
+
 MODDIR="${MODPATH:-$(dirname "$0")}"
-CFG=/data/adb/tricky_store
-PIF="$CFG/pif.prop"
+PIF="$CONFIG_DIR/pif.prop"
 LOG_TAG="TieJia-unify"
 
 log() { log -t "$LOG_TAG" "$@"; }

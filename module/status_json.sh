@@ -10,12 +10,12 @@ cd "$MODDIR" 2>/dev/null
 # Source shared helpers (is_valid_keybox etc.)
 [ -f "$MODDIR/common_func.sh" ] && . "$MODDIR/common_func.sh"
 
-CFG=/data/adb/tricky_store
+init_config
 OUT="$CFG/status.json"
 WEBUI="$MODDIR/webroot/status.json"
 
 # --- helpers ---
-flag_on()  { [ ! -f "$1" ] && echo true || echo false; }
+flag_on()    { config_get_bool "$1" && echo true || echo false; }
 flag_present() { [ -f "$1" ] && echo true || echo false; }
 kb_source() {
     local nm=""
@@ -72,7 +72,7 @@ TGT_N=$(grep -cvE '^[[:space:]]*$' "$CFG/target.txt" 2>/dev/null)
 case "$TGT_N" in ''|*[!0-9]*) TGT_N=0 ;; esac
 
 # --- interval (minutes) ---
-INT_SEC=$(cat "$CFG/hourly_interval_sec" 2>/dev/null)
+INT_SEC=$(config_get fp_interval 3600)
 case "$INT_SEC" in ''|*[!0-9]*) INT_SEC=3600 ;; esac
 INT_MIN=$((INT_SEC / 60))
 [ "$INT_MIN" -lt 1 ] && INT_MIN=60
@@ -98,10 +98,10 @@ cat > "$OUT" <<JSONEOF
   "target_count": $TGT_N,
   "interval_min": $INT_MIN,
   "toggles": {
-    "auto_fp": $(flag_on "$CFG/no_auto_fp"),
-    "auto_keybox": $(flag_on "$CFG/no_auto_keybox"),
-    "indicator": $(flag_on "$CFG/no_auto_indicator"),
-    "rom_spoof_block": $(flag_on "$CFG/no_rom_spoof_block"),
+    "auto_fp": $(flag_on fp_auto),
+    "auto_keybox": $(flag_on kb_auto),
+    "indicator": $(flag_on indicator_auto),
+    "rom_spoof_block": $(flag_on rom_cleanup_auto),
     "custom_keybox": $(flag_present "$CFG/custom_keybox")
   }
 }

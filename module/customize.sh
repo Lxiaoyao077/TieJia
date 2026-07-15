@@ -1,7 +1,7 @@
 # shellcheck disable=SC2034
 SKIPUNZIP=1
 MIN_SDK=29
-CONFIG_DIR="${TIEJIA_CONFIG_DIR:-/data/adb/tricky_store}"
+init_config
 
 # Extract common_func.sh early so verify_proc_name is available for the
 # kill loop below. We re-extract it later with the rest of the scripts.
@@ -98,7 +98,7 @@ for f in module.prop service.sh post-fs-data.sh action.sh \
          keybox_fetch.sh keybox_rotate.sh build_target_txt.sh status_fetch.sh description.txt \
          rom_spoof_block.sh conflict_scan.sh sync_patch.sh \
          boot_hash.sh target_cleanup.sh \
-         autopif.sh security_patch.sh \
+         security_patch.sh \
          daemon ; do
   install_file "$f" "$MODPATH"
 done
@@ -169,7 +169,7 @@ fi
 # --- /data/adb/tricky_store config ----------------------------------------
 mkdir -p "$CONFIG_DIR"
 
-# Tell PIF zygisk NOT to auto-generate pif.prop (handled by autopif.sh)
+# Tell PIF zygisk NOT to auto-generate pif.prop (handled by pif_native_fetch.sh)
 touch /data/adb/pif_script_only 2>/dev/null
 
 if [ -f "$CONFIG_DIR/keybox.xml" ]; then

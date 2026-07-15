@@ -18,7 +18,7 @@
 # to a monitor-only mode (log + skip, no crash).
 
 MODDIR="${MODPATH:-$(dirname "$0")}"
-CFG=/data/adb/tricky_store
+init_config
 LOG_FILE="$MODDIR/mount_isolation.log"
 CLEAN_DIR=/data/local/tmp/.as_mount_clean
 
@@ -52,20 +52,18 @@ isolate_process() {
     rm -rf '$CLEAN_DIR' 2>/dev/null
     mkdir -p '$CLEAN_DIR' 2>/dev/null || exit 1
     mount -t tmpfs tmpfs '$CLEAN_DIR' 2>/dev/null || exit 1
-    _salt=$(date +%s%N 2>/dev/null | sha256sum 2>/dev/null | cut -c1-8 || echo $(od -An -N4 -tu4 /dev/urandom 2>/dev/null | tr -d ' '))
-    echo "com.google.android.gms
-io.github.vvb2060.keyattestation
-io.github.vvb2060.mahoshojo
-# $_salt" > '$CLEAN_DIR/target.txt'
+    _salt=\$(date +%s%N 2>/dev/null | sha256sum 2>/dev/null | cut -c1-8 || echo \$(od -An -N4 -tu4 /dev/urandom 2>/dev/null | tr -d ' '))
+    printf '%s\n' com.google.android.gms io.github.vvb2060.keyattestation io.github.vvb2060.mahoshojo > '$CLEAN_DIR/target.txt'
+    printf '# %s\n' \"\$_salt\" >> '$CLEAN_DIR/target.txt'
     mount --bind '$CLEAN_DIR' '$CFG' 2>/dev/null || exit 1
     touch '$CLEAN_DIR/.isolated' 2>/dev/null
   " 2>/dev/null
 
   if [ $? -eq 0 ]; then
-    log "isolated $proc_name (pid=$pid) OK"
+    log "isolated $proc_name pid=$pid OK"
     return 0
   else
-    log "isolate $proc_name FAILED (SELinux/nsenter — skipping)"
+    log "isolate $proc_name FAILED - SELinux/nsenter skipping"
     return 1
   fi
 }
@@ -78,7 +76,7 @@ read_targets() {
 }
 
 # --- daemon loop ---
-log "mount isolation daemon started (GMS + target apps)"
+log "mount isolation daemon started: GMS + target apps"
 _cycle=0
 # Populate targets on first iteration so first 2min is not empty
 _targets=$(read_targets 2>/dev/null)

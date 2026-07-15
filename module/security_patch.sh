@@ -1,13 +1,18 @@
 #!/bin/sh
-# Tricky Store Security Patch Util
+# Tricky Store Security Patch Util  — TieJia v2.0.0
 
 MODDIR="${0%/*}"
 [ -z "$MODDIR" ] && MODDIR="/data/adb/modules/tricky_store"
-AUTO_FLAG="/data/adb/tricky_store/pif_auto_security_patch"
+
+SELF_DIR="$(cd "${0%/*}" 2>/dev/null && pwd)"
+. "$SELF_DIR/common_func.sh"
+init_config
+
+AUTO_FLAG="$CONFIG_DIR/pif_auto_security_patch"
 
 case "$1" in
     --enable) touch "$AUTO_FLAG";;
-    --disable) rm -f "$AUTO_FLAG" "/data/adb/tricky_store/system.prop"; exit;;
+    --disable) rm -f "$AUTO_FLAG" "$CONFIG_DIR/system.prop"; exit;;
 esac
 
 if [ -f "/data/adb/pif.prop" ]; then
@@ -19,13 +24,13 @@ else
     exit 1
 fi
 
-TS_MODPROP="/data/adb/modules/tricky_store/module.prop"
+TS_MODPROP="$MODDIR/module.prop"
 
 if [ -f "$TS_MODPROP" ]; then
     # James Clef's TrickyStore fork (GitHub@qwq233/TrickyStore)
-    if grep -q "James" "/data/adb/modules/tricky_store/module.prop" && ! grep -q "beakthoven" "/data/adb/modules/tricky_store/module.prop"; then
+    if grep -q "James" "$MODDIR/module.prop" && ! grep -q "beakthoven" "$MODDIR/module.prop"; then
         FILE_NAME="devconfig.toml"
-    else # Official behaviour, supported since 158 version, no extra checking here
+    else # Official behaviour, supported since 158 version
         FILE_NAME="security_patch.txt"
     fi
 else
@@ -33,7 +38,7 @@ else
     exit 1
 fi
 
-TARGET_FILE="/data/adb/tricky_store/$FILE_NAME"
+TARGET_FILE="$CONFIG_DIR/$FILE_NAME"
 SECURITY_PATCH="$(grep "^SECURITY_PATCH=" "$PIFPROP" | cut -d= -f2)"
 SHORT_PATCH="$(echo "$SECURITY_PATCH" | awk -F- '{print $1 $2}')"
 
@@ -66,7 +71,7 @@ elif [ "$FILE_NAME" = "devconfig.toml" ]; then
     fi
 fi
 
-cat << EOF > /data/adb/tricky_store/system.prop
+cat << EOF > "$CONFIG_DIR/system.prop"
 ro.build.version.security_patch=$SECURITY_PATCH
 ro.vendor.build.security_patch=$SECURITY_PATCH
 EOF

@@ -20,7 +20,7 @@ SELF_DIR=$(cd "${0%/*}" 2>/dev/null && pwd)
 [ -f "$SELF_DIR/common_func.sh" ] && . "$SELF_DIR/common_func.sh"
 find_sed 2>/dev/null || SED="sed -i"
 
-CONFIG_DIR="${TIEJIA_CONFIG_DIR:-/data/adb/tricky_store}"
+init_config
 SRC="$CONFIG_DIR/keybox.xml"
 DST="$CONFIG_DIR/keybox_active.xml"
 

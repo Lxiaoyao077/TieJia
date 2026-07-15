@@ -1,5 +1,5 @@
 #!/system/bin/sh
-# Build /data/adb/tricky_store/target.txt from all installed packages.
+# Build /data/adb/tricky_store/target.txt from all installed packages. — TieJia v2.0.0
 #
 # Modes (set via --mode or /data/adb/tricky_store/target_mode):
 #   auto       – user/OEM apps get no suffix; GMS/GSF/Vending get `!` (default)
@@ -11,6 +11,12 @@
 #
 # The aswatcher inotify daemon auto-adds newly installed packages at runtime;
 # this script produces the initial seed and the periodic Action-tap rebuild.
+
+SELF_DIR="$(cd "${0%/*}" 2>/dev/null && pwd)"
+. "$SELF_DIR/common_func.sh"
+init_config
+
+TRICKY_DIR="$CONFIG_DIR"
 
 # POSIX-portable "last argument" extraction (${@: -1} is bash-only)
 for last; do :; done

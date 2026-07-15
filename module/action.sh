@@ -16,7 +16,7 @@ unset ASH_STANDALONE
 [ -f "$MODPATH/common_func.sh" ] && . "$MODPATH/common_func.sh"
 find_sed
 
-CONFIG_DIR="${TIEJIA_CONFIG_DIR:-/data/adb/tricky_store}"
+init_config
 LINE="========================="
 VER=$(grep -m1 '^version=' "$MODPATH/module.prop" 2>/dev/null | cut -d= -f2-)
 
@@ -210,12 +210,12 @@ if [ "$FP_OK" = 0 ]; then
     row "🔄" "尝试备用方案..."
     sleep 1
 
-    # Fallback A: autopif4 (PIF fork) — bounded to 10s.
-    if [ -f "$MODPATH/autopif4.sh" ]; then
+    # Fallback A: pif_native_fetch selective mode — bounded to 10s.
+    if [ -x "$MODPATH/pif_native_fetch.sh" ]; then
         if command -v timeout >/dev/null 2>&1; then
-            timeout 10 sh "$MODPATH/autopif4.sh" -s -m >>"$CONFIG_DIR/autopif.log" 2>&1 && FP_OK=1
+            timeout 10 sh "$MODPATH/pif_native_fetch.sh" -s -m >>"$CONFIG_DIR/autopif.log" 2>&1 && FP_OK=1
         else
-            sh "$MODPATH/autopif4.sh" -s -m >>"$CONFIG_DIR/autopif.log" 2>&1 && FP_OK=1
+            sh "$MODPATH/pif_native_fetch.sh" -s -m >>"$CONFIG_DIR/autopif.log" 2>&1 && FP_OK=1
         fi
         [ "$FP_OK" = 1 ] && FP_SRC="pif"
     fi

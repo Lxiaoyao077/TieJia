@@ -20,7 +20,7 @@ esac
 [ -z "$MODPATH" ] && MODPATH="$PWD"
 [ -f "$MODPATH/common_func.sh" ] && . "$MODPATH/common_func.sh"
 find_sed 2>/dev/null || SED="sed -i"
-CONFIG_DIR="${TIEJIA_CONFIG_DIR:-/data/adb/tricky_store}"
+init_config
 MODE="${1:-}"
 
 # --- find the dotted patch (YYYY-MM-DD) from a pif file -------------------
