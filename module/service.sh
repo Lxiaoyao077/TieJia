@@ -114,7 +114,7 @@ for LP in vendor.camera.aux.packagelist persist.vendor.camera.privapp.list; do
 done
 if [ -n "$(getprop init.svc.vendor.lineage_health 2>/dev/null)" ]; then
     stop vendor.lineage_health 2>/dev/null
-    resetprop --delete init.svc.vendor.lineage_health 2>/dev/null
+    resetprop -n init.svc.vendor.lineage_health "" 2>/dev/null
 fi
 }&
 
