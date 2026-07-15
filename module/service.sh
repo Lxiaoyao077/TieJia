@@ -1,0 +1,387 @@
+#!/system/bin/sh
+MODDIR="${0%/*}"
+MODPATH="$MODDIR"
+cd "$MODDIR"
+
+set +o standalone 2>/dev/null
+unset ASH_STANDALONE
+
+[ -f "$MODDIR/common_func.sh" ] && . "$MODDIR/common_func.sh"
+find_sed
+
+# --- Logcat leak prevention (early) ---
+if [ -x "$MODDIR/logcat_cleanup.sh" ]; then
+    sh "$MODDIR/logcat_cleanup.sh" >/dev/null 2>&1 &
+fi
+
+# --- dmesg_restrict: block non-root access to kernel log ---
+# Prevents detection apps from reading dmesg for Magisk/SuperSU boot traces.
+# Setting persists until next reboot; service.sh re-applies each boot.
+if [ -w /proc/sys/kernel/dmesg_restrict ]; then
+    echo 1 > /proc/sys/kernel/dmesg_restrict 2>/dev/null
+fi
+
+# --- Recovery mode guard ---
+resetprop_if_match ro.boot.mode recovery unknown
+resetprop_if_match ro.bootmode recovery unknown
+resetprop_if_match ro.boot.bootmode recovery unknown
+resetprop_if_match vendor.boot.mode recovery unknown
+resetprop_if_match vendor.boot.bootmode recovery unknown
+
+# --- SELinux enforcement ---
+resetprop_if_diff ro.boot.selinux enforcing
+if ! ${SKIPDELPROP:-false}; then
+    delprop_if_exist ro.build.selinux 2>/dev/null || true
+fi
+if [ "$(toybox cat /sys/fs/selinux/enforce 2>/dev/null)" = "0" ]; then
+    chmod 640 /sys/fs/selinux/enforce
+    chmod 440 /sys/fs/selinux/policy
+fi
+
+# --- Late properties (after boot_completed) — required for some OEMs ---
+{
+until [ "$(getprop sys.boot_completed)" = "1" ]; do sleep 1; done
+
+# Verified-boot / bootloader-lock fingerprint
+resetprop_if_diff ro.secureboot.lockstate locked
+resetprop_if_diff ro.boot.flash.locked 1
+resetprop_if_diff ro.boot.realme.lockstate 1
+resetprop_if_diff ro.boot.vbmeta.device_state locked
+resetprop_if_diff vendor.boot.verifiedbootstate green
+resetprop_if_diff ro.boot.verifiedbootstate green
+resetprop_if_diff ro.boot.veritymode enforcing
+resetprop_if_diff vendor.boot.veritymode enforcing
+resetprop_if_diff vendor.boot.vbmeta.device_state locked
+resetprop_if_diff sys.oem_unlock_allowed 0
+resetprop_if_diff ro.boot.warranty_bit 0
+resetprop_if_diff ro.warranty_bit 0
+resetprop_if_diff ro.secure 1
+resetprop_if_diff ro.debuggable 0
+resetprop_if_diff ro.adb.secure 1
+resetprop_if_diff service.adb.root 0
+resetprop_if_diff ro.boot.vbmeta.invalidate_on_error yes
+
+# --- USB / ADB / Developer status concealment ---
+# Clear all developer-related USB config and ADB state.
+# Banking and ID apps check these to infer a tampered environment.
+delprop_if_exist persist.sys.usb.config 2>/dev/null || true
+delprop_if_exist persist.sys.usb.ffs.ready 2>/dev/null || true
+delprop_if_exist persist.vendor.usb.config 2>/dev/null || true
+delprop_if_exist persist.usb.config 2>/dev/null || true
+resetprop_if_diff sys.usb.state "mtp"
+resetprop_if_diff sys.usb.config "mtp"
+resetprop_if_diff init.svc.adbd "stopped"
+resetprop_if_diff persist.adb.enable 0
+resetprop_if_diff persist.sys.usb.config "mtp"
+resetprop_if_diff persist.vendor.usb.config "mtp"
+
+# Stop adbd daemon if running
+setprop ctl.stop adbd 2>/dev/null || true
+
+# Developer options + OEM unlock visibility
+delprop_if_exist persist.logd.logpersistd 2>/dev/null || true
+delprop_if_exist persist.logd.logpersistd.enable 2>/dev/null || true
+resetprop_if_diff ro.debuggable 0
+resetprop_if_diff ro.force.debuggable 0
+resetprop_if_diff ro.adb.secure 1
+resetprop_if_diff service.adb.root 0
+resetprop_if_diff ro.build.type "user"
+resetprop_if_diff ro.build.tags "release-keys"
+resetprop_if_diff ro.build.selinux "1"
+resetprop_if_diff persist.sys.dalvik.vm.lib.2 "libart.so"
+resetprop_if_diff dalvik.vm.dex2oat-filter "speed"
+resetprop_if_diff dalvik.vm.image-dex2oat-filter "speed"
+
+# Tracer / debug detection — banking apps scan these
+delprop_if_exist ro.monkey 2>/dev/null || true
+delprop_if_exist ro.boot.monkey 2>/dev/null || true
+delprop_if_exist ro.build.user 2>/dev/null || true
+delprop_if_exist ro.build.host 2>/dev/null || true
+
+# Magic overlay props — hide from Magisk/KSU overlays detection
+# NOTE: ro.dalvik.vm.native.bridge must NOT be deleted — it is set
+# by Zygisk Next / Riru for zygote injection. Deleting it breaks Zygisk.
+# Instead, we reset it to a safe value only if it's empty or clearly wrong.
+
+# --- LineageOS prop scrub (hide derivative-ROM markers from PI checks) ---
+LV=$(getprop ro.product.vendor.name 2>/dev/null)
+case "$LV" in
+    lineage_*) resetprop -n ro.product.vendor.name "${LV#lineage_}" ;;
+esac
+for LP in vendor.camera.aux.packagelist persist.vendor.camera.privapp.list; do
+    LCV=$(getprop "$LP" 2>/dev/null)
+    case "$LCV" in
+        *org.lineageos.aperture*)
+            LCV=$(echo "$LCV" | sed -e 's/,org\.lineageos\.aperture//g' \
+                                    -e 's/org\.lineageos\.aperture,//g' \
+                                    -e 's/^org\.lineageos\.aperture$//')
+            resetprop -n "$LP" "$LCV"
+            ;;
+    esac
+done
+if [ -n "$(getprop init.svc.vendor.lineage_health 2>/dev/null)" ]; then
+    stop vendor.lineage_health 2>/dev/null
+    resetprop --delete init.svc.vendor.lineage_health 2>/dev/null
+fi
+
+# --- Developer options state hiding (settings provider) ---
+# Many detection apps check Settings.Global.DEVELOPMENT_SETTINGS_ENABLED
+# to infer a tampered/developer device profile.
+# settings put requires the settings provider to be ready (post-boot).
+settings put global development_settings_enabled 0 2>/dev/null || true
+# NOTE: adb_enabled is deliberately NOT written here — it persists across
+# reboots and would prevent the user from re-enabling ADB. Runtime hiding
+# is already handled above via setprop ctl.stop adbd + resetprop.
+
+# --- ROM fingerprint deep scrub (Specter-style keyword scan) ---
+if [ -x "$MODDIR/rom_fp_cleanup.sh" ]; then
+    MODPATH="$MODDIR" sh "$MODDIR/rom_fp_cleanup.sh" >/dev/null 2>&1 &
+fi
+}&
+
+# --- Conflict re-scan on every boot ---
+# A user can install a conflicting module AFTER they've installed AlwaysStrong
+# (the install-time scan in customize.sh only fires once). Re-run the same
+# disable-known-conflicts pass at every boot so a fresh install of e.g.
+# playintegrityfix doesn't silently break our hooks.
+if [ -x "$MODDIR/conflict_scan.sh" ]; then
+    MODPATH="$MODDIR" sh "$MODDIR/conflict_scan.sh" >/dev/null 2>&1
+    n=$?
+    [ "$n" -gt 0 ] && log_save "AlwaysStrong" "disabled $n conflicting module(s) at boot"
+fi
+
+# --- Wait for boot, then start TEE simulator ---
+while [ "$(getprop sys.boot_completed)" != "1" ]; do sleep 2; done
+
+# Kill any stale TEE / aswatcher processes from a previous boot
+for proc in TEESimulator supervisor daemon aswatcher; do
+  for pid in $(pidof "$proc" 2>/dev/null); do
+    verify_proc_name "$pid" "$proc" && kill -9 "$pid" 2>/dev/null
+  done
+done
+pkill -9 -f TEESimulator 2>/dev/null || true
+
+# --- Boot hash (zero-rejection priority chain) ---
+# Run early so TEE simulator has device identity hash before keybox init.
+# Uses partition hashes with all-zero rejection — critical for key derivation.
+if [ -x "$MODDIR/boot_hash.sh" ]; then
+    MODPATH="$MODDIR" sh "$MODDIR/boot_hash.sh" >/dev/null 2>&1 &
+    log_save "AlwaysStrong" "boot hash generation started"
+fi
+
+# Fork-based supervisor + daemon (TEESimulator-RS standard pattern)
+"$MODDIR/supervisor" "$MODDIR/daemon" "$MODDIR" &
+
+# --- aswatcher native daemon (inotify target.txt + Xposed + conflict) ---
+case "$(uname -m)" in
+    aarch64)       AS_ABI=arm64-v8a ;;
+    armv7*|armv8l) AS_ABI=armeabi-v7a ;;
+    x86_64)        AS_ABI=x86_64 ;;
+    i?86)          AS_ABI=x86 ;;
+    *)             AS_ABI="" ;;
+esac
+AS_BIN="$MODDIR/bin/$AS_ABI/aswatcher"
+if [ -x "$AS_BIN" ]; then
+    {
+        sleep 5
+        "$AS_BIN" &
+        log_save "AlwaysStrong" "aswatcher launched ($AS_ABI)"
+    } &
+fi
+
+# --- Mount namespace isolation for GMS (Specter-style) ---
+if [ -x "$MODDIR/mount_isolation.sh" ]; then
+    {
+        sleep 30
+        MODPATH="$MODDIR" sh "$MODDIR/mount_isolation.sh" >/dev/null 2>&1 &
+        log_save "AlwaysStrong" "mount isolation daemon started"
+    } &
+fi
+
+# --- /proc trace obfuscation ---
+if [ -x "$MODDIR/proc_obfuscate.sh" ]; then
+    {
+        sleep 10
+        MODPATH="$MODDIR" sh "$MODDIR/proc_obfuscate.sh" >/dev/null 2>&1 &
+        log_save "AlwaysStrong" "proc obfuscation daemon started"
+    } &
+fi
+
+# --- Prop unification (align product props with fingerprint) ---
+if [ -x "$MODDIR/prop_unify.sh" ]; then
+    {
+        sleep 40
+        MODPATH="$MODDIR" sh "$MODDIR/prop_unify.sh" >/dev/null 2>&1 &
+    } &
+fi
+
+# --- VBMeta digest (deferred, bounded) ---
+# Reading the whole vbmeta partition during early boot can hang the boot
+# animation on some Xiaomi devices. Skip if already set, only read 64KiB.
+{
+sleep 60
+CURRENT_DIGEST=$(resetprop ro.boot.vbmeta.digest)
+if [ -z "$CURRENT_DIGEST" ] || echo "$CURRENT_DIGEST" | grep -qE '^0+$'; then
+    for p in /dev/block/by-name/vbmeta /dev/block/by-name/vbmeta_a /dev/block/bootdevice/by-name/vbmeta; do
+        [ -e "$p" ] && VBMETA_BLK="$p" && break
+    done
+    if [ -n "$VBMETA_BLK" ]; then
+        DIGEST=$(dd if="$VBMETA_BLK" bs=4096 count=16 2>/dev/null | sha256sum 2>/dev/null | cut -d' ' -f1)
+        if [ -n "$DIGEST" ]; then
+            resetprop -n ro.boot.vbmeta.digest "$DIGEST"
+            log_save "AlwaysStrong" "VBMeta digest set: ${DIGEST:0:16}..."
+        fi
+    fi
+fi
+}&
+
+# --- Housekeeping in background ---
+{
+    sleep 3
+    # Hide TWRP-style recovery folders on /sdcard if empty
+    for rdir in TWRP Fox OrangeFox PBRP PitchBlack Recovery; do
+        target="/sdcard/$rdir"
+        if [ -d "$target" ] && [ "$(ls -A "$target" 2>/dev/null)" ]; then
+            mv "$target" "/data/adb/.recovery_backup_${rdir}" 2>/dev/null
+        elif [ -d "$target" ]; then
+            rmdir "$target" 2>/dev/null
+        fi
+    done
+    rm -f /sdcard/.twrps 2>/dev/null
+}&
+
+# --- TEESimulator + aswatcher watchdog ---
+{
+    while true; do
+        sleep 120
+        if ! pidof TEESimulator >/dev/null 2>&1 && ! pidof daemon >/dev/null 2>&1; then
+            log_save "AlwaysStrong" "TEE daemon died, restarting..."
+            "$MODDIR/supervisor" "$MODDIR/daemon" "$MODDIR" &
+        fi
+        if [ -x "$AS_BIN" ] && ! pidof aswatcher >/dev/null 2>&1; then
+            log_save "AlwaysStrong" "aswatcher died, restarting..."
+            "$AS_BIN" &
+        fi
+    done
+}&
+
+# --- First-boot bootstrap (one-shot per module install) ------------------
+# Marker file lives inside MODDIR — gets wiped when the module is
+# uninstalled, so a reinstall re-bootstraps cleanly. On subsequent boots
+# this whole block is a no-op; users press [Action] to refresh manually.
+if [ ! -f "$CONFIG_DIR/.bootstrapped" ]; then
+{
+    sleep 20
+    # network usually up well before this, but defer further for slow boots
+    j=0
+    until ping -c1 -W2 1.1.1.1 >/dev/null 2>&1; do
+        j=$((j+1)); [ $j -gt 30 ] && break
+        sleep 2
+    done
+    log_save "AlwaysStrong-boot" "first boot: starting bootstrap"
+
+    # 1. keybox
+    if [ -x "$MODDIR/keybox_fetch.sh" ]; then
+        sh "$MODDIR/keybox_fetch.sh" 2>&1 | log -t "AlwaysStrong-boot"
+        # Rotate if multi-entry keybox served
+        [ -x "$MODDIR/keybox_rotate.sh" ] && MODPATH="$MODDIR" sh "$MODDIR/keybox_rotate.sh" 2>&1 | log -t "AlwaysStrong-boot"
+    fi
+
+    # 2. fingerprint + security patch (Pixel Canary via pif_native_fetch)
+    if [ -x "$MODDIR/pif_native_fetch.sh" ]; then
+        sh "$MODDIR/pif_native_fetch.sh" -s -m 2>&1 | log -t "AlwaysStrong-boot"
+    fi
+
+    # 2b. sync the attestation/system security patch to the fresh fingerprint
+    [ -f "$MODDIR/sync_patch.sh" ] && sh "$MODDIR/sync_patch.sh" 2>&1 | log -t "AlwaysStrong-boot"
+
+    # 2c. unify product props with spoofed fingerprint (detection cross-consistency)
+    [ -x "$MODDIR/prop_unify.sh" ] && MODPATH="$MODDIR" sh "$MODDIR/prop_unify.sh" 2>&1 | log -t "AlwaysStrong-unify"
+
+    # 3. enforce STRONG-friendly settings on every produced pif.prop variant
+    for CPIF in /data/adb/tricky_store/custom.pif.prop /data/adb/tricky_store/pif.prop; do
+        [ -f "$CPIF" ] || continue
+        for kv in "spoofProvider=0" "spoofVendingFinger=1" "spoofBuild=1" \
+                  "spoofProps=1" "spoofSignature=0" "spoofVendingSdk=0"; do
+            k="${kv%=*}"; v="${kv#*=}"
+            if grep -qE "^${k}=" "$CPIF"; then
+                $SED "s|^${k}=.*|${k}=${v}|" "$CPIF"
+            else
+                echo "${k}=${v}" >> "$CPIF"
+            fi
+        done
+        log_save "AlwaysStrong-boot" "STRONG enforced on $CPIF"
+    done
+
+    # 4. restart PI consumers so they pick up the new state
+    killall -9 com.google.android.gms.unstable 2>/dev/null
+    killall -9 com.android.vending 2>/dev/null
+
+    # NOTE: deliberately do NOT call status_fetch here. We don't want
+    # the 🟢 status prefix to appear in module.prop's description before
+    # the user has interacted with the module at all — the description
+    # stays as the clean text from module.prop until the user presses
+    # [Action] (or the hourly refresh fires, whichever happens first).
+
+    # mark done regardless of individual step outcome — user can press
+    # [Action] to retry if any step failed (e.g. no internet on first boot)
+    touch "$CONFIG_DIR/.bootstrapped"
+    log_save "AlwaysStrong-boot" "bootstrap done"
+}&
+fi
+
+# --- Hourly refresh (fingerprint + keybox, each toggle-able from WebUI) --
+# WebUI writes flag files into /data/adb/tricky_store/ to opt OUT:
+#   no_auto_fp      -> skip the autopif refresh
+#   no_auto_keybox  -> skip the keybox fetch
+# Keybox-only restarts PI when it actually changed (exit 0); fingerprint
+# updates are picked up naturally on the next PI invocation, so we don't
+# kick running banking apps for cosmetic refreshes.
+{
+    CFG=/data/adb/tricky_store
+    export MODPATH="$MODDIR"
+    while true; do
+        # Interval is user-configurable from the WebUI. Default 1h, floor 60s
+        # so a misconfigured 0/-1/garbage doesn't busy-spin the loop.
+        INT=$(cat "$CFG/hourly_interval_sec" 2>/dev/null)
+        case "$INT" in
+            ''|*[!0-9]*) INT=3600 ;;
+        esac
+        [ "$INT" -lt 60 ] && INT=60
+        sleep "$INT"
+        if [ ! -f "$CFG/no_auto_fp" ] && [ -x "$MODDIR/pif_native_fetch.sh" ]; then
+            sh "$MODDIR/pif_native_fetch.sh" -s -m 2>&1 | log -t "AlwaysStrong-hourly"
+            [ -f "$MODDIR/sync_patch.sh" ] && sh "$MODDIR/sync_patch.sh" 2>&1 | log -t "AlwaysStrong-hourly"
+            [ -x "$MODDIR/prop_unify.sh" ] && MODPATH="$MODDIR" sh "$MODDIR/prop_unify.sh" 2>&1 | log -t "AlwaysStrong-unify"
+        fi
+        if [ ! -f "$CFG/no_auto_keybox" ] && [ -x "$MODDIR/keybox_fetch.sh" ]; then
+            kbout=$(sh "$MODDIR/keybox_fetch.sh" 2>&1)
+            kbrc=$?
+            [ -n "$kbout" ] && echo "$kbout" | log -t "AlwaysStrong-hourly"
+            if [ "$kbrc" = "0" ]; then
+                [ -x "$MODDIR/keybox_rotate.sh" ] && MODPATH="$MODDIR" sh "$MODDIR/keybox_rotate.sh" 2>&1 | log -t "AlwaysStrong-hourly"
+                log_save "AlwaysStrong-hourly" "keybox updated, restarting PI"
+                killall -9 com.google.android.gms.unstable 2>/dev/null
+                killall -9 com.android.vending 2>/dev/null
+            fi
+        fi
+        # Target cleanup — removes uninstalled apps from target.txt every 6h
+        if [ -x "$MODDIR/target_cleanup.sh" ]; then
+            LAST_CLEAN=$(cat "$CFG/.last_target_cleanup" 2>/dev/null)
+            NOW=$(date +%s)
+            if [ -z "$LAST_CLEAN" ] || [ $((NOW - LAST_CLEAN)) -gt 21600 ]; then
+                MODPATH="$MODDIR" sh "$MODDIR/target_cleanup.sh" >/dev/null 2>&1
+                echo "$NOW" > "$CFG/.last_target_cleanup" 2>/dev/null
+            fi
+        fi
+        # Status — independent of toggles; cheap GET, idempotent module.prop write
+        if [ -x "$MODDIR/status_fetch.sh" ]; then
+            sh "$MODDIR/status_fetch.sh" 2>&1 | log -t "AlwaysStrong-hourly"
+        fi
+        # Preload JSON for WebUI — generated from module state so the UI
+        # renders instantly (no per-toggle ksuExec waterfall on load).
+        if [ -x "$MODDIR/status_json.sh" ]; then
+            sh "$MODDIR/status_json.sh" 2>&1 | log -t "AlwaysStrong-hourly"
+        fi
+    done
+}&

@@ -1,0 +1,40 @@
+# AlwaysStrong conflict resolution — Specter-style declarative format
+# id|display_name|type|features|scripts
+#
+# type: aggressive   (remove module + disable marker + rm -rf)
+#        moderate    (disable conflicting scripts only)
+#        passive     (log warning, user toggles in WebUI)
+#
+# Features tell the resolver what AlwaysStrong capabilities a conflict
+# overlaps with, so we can decide whether to disable just that feature
+# or the whole conflicting module. Currently unused — reserved for
+# future granular conflict resolution.
+
+# --- aggressive (full removal) ---
+playintegrityfix|Play Integrity Fix|aggressive|security_patch,target|/data/adb/modules/playintegrityfix/service.sh,/data/adb/modules/playintegrityfix/post-fs-data.sh
+playintegrityfork|Play Integrity Fork|aggressive|security_patch,target|/data/adb/modules/playintegrityfork/service.sh
+play_integrity_fix|Play Integrity Fix|aggressive|security_patch,target|/data/adb/modules/play_integrity_fix/service.sh
+pif_strong|PIF Strong|aggressive|security_patch|/data/adb/modules/pif_strong/service.sh
+pif_force|PIF Force|aggressive|security_patch|/data/adb/modules/pif_force/service.sh
+safetynet-fix|SafetyNet Fix|aggressive||/data/adb/modules/safetynet-fix/service.sh
+Universal_SafetyNet_Fix|Universal SafetyNet Fix|aggressive||/data/adb/modules/Universal_SafetyNet_Fix/service.sh
+MagiskHidePropsConf|MagiskHide Props Config|aggressive||/data/adb/modules/MagiskHidePropsConf/service.sh
+Yurikey|Yurikey Manager|aggressive|security_patch|/data/adb/modules/Yurikey/service.sh
+
+# --- moderate (disable scripts, keep module) ---
+tricky_store_v2|Tricky Store v2|moderate|keybox,security_patch|/data/adb/modules/tricky_store_v2/service.sh
+TrickyStore|Tricky Store|moderate|keybox,security_patch|/data/adb/modules/TrickyStore/service.sh
+
+# --- passive (log only) ---
+TA_utl|Tricky Addon - Update Target List|passive|target|/data/adb/modules/TA_utl/prop.sh
+TA_enhanced|Tricky Addon Enhanced|passive|target,security_patch|/data/adb/modules/TA_enhanced/prop.sh
+tsupport-advance|TSupport-Advance|passive|security_patch,target|/data/adb/modules/tsupport-advance/service.sh
+
+# --- misc cleanup (leftover artifacts) ---
+playcurl|Playcurl|aggressive||/data/adb/modules/playcurl/service.sh
+playcurlNEXT|Playcurl Next|aggressive||/data/adb/modules/playcurlNEXT/service.sh
+
+# Tee simulator forks — AlwaysStrong ships its own TEESimulator-RS
+tee_simulator|TEE Simulator|aggressive|tee|/data/adb/modules/tee_simulator/service.sh
+TEESimulator|TEESimulator|aggressive|tee|/data/adb/modules/TEESimulator/service.sh
+TEESimulator-RS|TEESimulator-RS|aggressive|tee|/data/adb/modules/TEESimulator-RS/service.sh
