@@ -1,7 +1,7 @@
 #!/system/bin/sh
 # logcat_cleanup.sh — logcat leak prevention
 #
-# Detection apps can scan logcat for AlwaysStrong-specific log tags
+# Detection apps can scan logcat for TieJia-specific log tags
 # or error messages that reveal module internals. This script:
 #   1. Suppresses our log tags via persist.log.tag.* props
 #   2. Periodically removes only our own log lines (per-tag sed)
@@ -19,14 +19,14 @@ find_sed
 # Some ROMs have persist.log.tag.* props that control per-tag logging.
 # 'S' = suppress — logd drops all log messages with this tag before
 # they reach the buffer, which is cleaner than post-hoc scrubbing.
-resetprop persist.log.tag.AlwaysStrong S
-resetprop persist.log.tag.AlwaysStrong-boot S
-resetprop persist.log.tag.AlwaysStrong-hourly S
-resetprop persist.log.tag.AlwaysStrong-unify S
-resetprop persist.log.tag.AlwaysStrong-proc S
+resetprop persist.log.tag.TieJia S
+resetprop persist.log.tag.TieJia-boot S
+resetprop persist.log.tag.TieJia-hourly S
+resetprop persist.log.tag.TieJia-unify S
+resetprop persist.log.tag.TieJia-proc S
 
 # Remove any lingering temp log files from previous runs
-rm -f /data/local/tmp/AlwaysStrong*.log 2>/dev/null
+rm -f /data/local/tmp/TieJia*.log 2>/dev/null
 
 # --- 2. Per-tag logcat scrub (no full-buffer clear) ---
 # Clearing entire logcat buffers (logcat -c) is itself a detection signal —
@@ -35,29 +35,28 @@ rm -f /data/local/tmp/AlwaysStrong*.log 2>/dev/null
 # The -d flag dumps and exits (non-blocking), safe for periodic use.
 
 scrub_logcat() {
-  local tmp="/data/local/tmp/.as_lc_scrub.$$"
   local changed=0
 
+  # Per-tag log suppression via prop is handled in the init block above.
+  # We do NOT clear logcat buffers here — clearing is itself a detection
+  # signal (only root can -c, and apps check for "recently cleared").
+  # Instead, we rely on persist.log.tag suppression to prevent our tags
+  # from entering the buffer in the first place.
+
+  # Check if our tags leaked anyway (race on boot) and log a warning.
   for buf in main system crash events; do
-    if logcat -b "$buf" -d 2>/dev/null | grep -qiE "AlwaysStrong|TEESimulator|aswatcher" 2>/dev/null; then
-      logcat -b "$buf" -d 2>/dev/null | sed -E '/AlwaysStrong|TEESimulator|aswatcher/Id' > "$tmp" 2>/dev/null
-      if [ -s "$tmp" ]; then
-        logcat -b "$buf" -c 2>/dev/null
-        cat "$tmp" | while IFS= read -r line; do
-          echo "$line" > /dev/kmsg 2>/dev/null
-        done
-      fi
+    if logcat -b "$buf" -d 2>/dev/null | grep -qiE "TieJia|TEESimulator|aswatcher" 2>/dev/null; then
+      log_save "TieJia" "warning: TieJia tags detected in $buf buffer (suppression may not be active yet)"
       changed=1
     fi
   done
-  rm -f "$tmp" 2>/dev/null
 
   # ANR traces — remove lines containing our processes (sed, not rm)
   for anr in /data/anr/anr_* /data/anr/traces.txt; do
     [ -f "$anr" ] && {
-      grep -q "TEESimulator\|aswatcher\|AlwaysStrong" "$anr" 2>/dev/null && {
-        $SED '/TEESimulator\|aswatcher\|AlwaysStrong\|libinject\|libTEESimulator/d' "$anr" 2>/dev/null
-        log_save "AlwaysStrong" "sanitized ANR: $anr"
+      grep -q "TEESimulator\|aswatcher\|TieJia" "$anr" 2>/dev/null && {
+        $SED '/TEESimulator\|aswatcher\|TieJia\|libinject\|libTEESimulator/d' "$anr" 2>/dev/null
+        log_save "TieJia" "sanitized ANR: $anr"
         changed=1
       }
     }
@@ -66,15 +65,15 @@ scrub_logcat() {
   # Tombstones — remove lines containing our processes (sed, not rm)
   for tomb in /data/tombstones/tombstone_*; do
     [ -f "$tomb" ] && {
-      grep -q "TEESimulator\|aswatcher\|AlwaysStrong" "$tomb" 2>/dev/null && {
-        $SED '/TEESimulator\|aswatcher\|AlwaysStrong\|libinject\|libTEESimulator/d' "$tomb" 2>/dev/null
-        log_save "AlwaysStrong" "sanitized tombstone: $tomb"
+      grep -q "TEESimulator\|aswatcher\|TieJia" "$tomb" 2>/dev/null && {
+        $SED '/TEESimulator\|aswatcher\|TieJia\|libinject\|libTEESimulator/d' "$tomb" 2>/dev/null
+        log_save "TieJia" "sanitized tombstone: $tomb"
         changed=1
       }
     }
   done
 
-  [ "$changed" = 1 ] && log_save "AlwaysStrong" "logcat scrubbed"
+  [ "$changed" = 1 ] && log_save "TieJia" "logcat scrubbed"
 }
 
 # --- 3. Periodic scrub daemon ---
@@ -85,4 +84,4 @@ scrub_logcat() {
   done
 } &
 
-log_save "AlwaysStrong" "logcat cleanup initialized"
+log_save "TieJia" "logcat cleanup initialized"

@@ -1,5 +1,5 @@
 #!/system/bin/sh
-# AlwaysStrong action button.
+# TieJia action button.
 # Shows each step progressively with status feedback.
 
 case "$0" in
@@ -36,27 +36,36 @@ for bb in /data/adb/magisk/busybox /data/adb/ksu/bin/busybox /data/adb/ap/bin/bu
     [ -x "$bb" ] && BB="$bb" && break
 done
 
+# Proxy support: honor http_proxy / ALL_PROXY env vars (set by user or VPN apps).
+# In GFW environments this is essential for GitHub downloads.
+_pxy_env() {
+    local _e=""
+    [ -n "$http_proxy" ] && _e="http_proxy=$http_proxy $_e"
+    [ -n "$ALL_PROXY" ] && _e="ALL_PROXY=$ALL_PROXY $_e"
+    echo "$_e"
+}
+
 # asfetch first (connects IPv4-first, works on IPv6-only-DNS networks); fall
 # through to busybox wget / curl if it ever fails on a host.
 dl_out() {
-    if [ -n "$ASFETCH" ]; then $ASFETCH -T 20 "$1" 2>/dev/null && return 0; fi
-    if [ -n "$BB" ]; then $BB wget -q -T 20 -O - "$1" 2>/dev/null && return 0; fi
-    if command -v curl >/dev/null 2>&1; then curl -fsSL --max-time 20 "$1" 2>/dev/null && return 0; fi
-    if command -v wget >/dev/null 2>&1; then wget -q -T 20 -O - "$1" 2>/dev/null && return 0; fi
+    if [ -n "$ASFETCH" ]; then eval "$(_pxy_env)" $ASFETCH -T 20 "$1" 2>/dev/null && return 0; fi
+    if [ -n "$BB" ]; then eval "$(_pxy_env)" $BB wget -q -T 20 -O - "$1" 2>/dev/null && return 0; fi
+    if command -v curl >/dev/null 2>&1; then eval "$(_pxy_env)" curl -fsSL --max-time 20 "$1" 2>/dev/null && return 0; fi
+    if command -v wget >/dev/null 2>&1; then eval "$(_pxy_env)" wget -q -T 20 -O - "$1" 2>/dev/null && return 0; fi
     return 1
 }
 dl_to() {
-    if [ -n "$ASFETCH" ]; then rm -f "$1"; $ASFETCH -T 60 -o "$1" "$2" 2>/dev/null; [ -s "$1" ] && return 0; fi
-    if [ -n "$BB" ]; then rm -f "$1"; $BB wget -q -T 60 -O "$1" "$2" 2>/dev/null; [ -s "$1" ] && return 0; fi
-    if command -v curl >/dev/null 2>&1; then rm -f "$1"; curl -fsSL --max-time 60 -o "$1" "$2" 2>/dev/null; [ -s "$1" ] && return 0; fi
-    if command -v wget >/dev/null 2>&1; then rm -f "$1"; wget -q -T 60 -O "$1" "$2" 2>/dev/null; [ -s "$1" ] && return 0; fi
+    if [ -n "$ASFETCH" ]; then rm -f "$1"; eval "$(_pxy_env)" $ASFETCH -T 60 -o "$1" "$2" 2>/dev/null; [ -s "$1" ] && return 0; fi
+    if [ -n "$BB" ]; then rm -f "$1"; eval "$(_pxy_env)" $BB wget -q -T 60 -O "$1" "$2" 2>/dev/null; [ -s "$1" ] && return 0; fi
+    if command -v curl >/dev/null 2>&1; then rm -f "$1"; eval "$(_pxy_env)" curl -fsSL --max-time 60 -o "$1" "$2" 2>/dev/null; [ -s "$1" ] && return 0; fi
+    if command -v wget >/dev/null 2>&1; then rm -f "$1"; eval "$(_pxy_env)" wget -q -T 60 -O "$1" "$2" 2>/dev/null; [ -s "$1" ] && return 0; fi
     return 1
 }
 
 # --- Header ---
 echo ""
 echo "  $LINE"
-row "🛡️" "AlwaysStrong  ${VER}"
+row "🛡️" "TieJia  ${VER}"
 echo "  $LINE"
 echo ""
 row "⏳" "初始化中..."
@@ -219,7 +228,7 @@ sleep 1
 # --- Restart PI + status ---
 killall -9 com.google.android.gms.unstable 2>/dev/null
 killall -9 com.android.vending 2>/dev/null
-am force-stop com.android.vending >/dev/null 2>&1
+am force-stop com.android.vending >/dev/null 2>&1 &
 
 if [ -x "$MODPATH/status_fetch.sh" ]; then
     MODPATH="$MODPATH" sh "$MODPATH/status_fetch.sh" manual >/dev/null 2>&1

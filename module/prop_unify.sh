@@ -14,7 +14,7 @@
 MODDIR="${MODPATH:-$(dirname "$0")}"
 CFG=/data/adb/tricky_store
 PIF="$CFG/pif.prop"
-LOG_TAG="AlwaysStrong-unify"
+LOG_TAG="TieJia-unify"
 
 log() { log -t "$LOG_TAG" "$@"; }
 
@@ -65,7 +65,8 @@ done < "$PIF"
 # If FINGERPRINT is set, parse it to extract brand/product/device
 # Format: brand/product/device:user/release_version/id/incremental:userdebug/test-keys
 # Example: google/caiman_beta/caiman:15/BP11.241121.013/13016754:user/release-keys
-if [ -n "$FINGERPRINT" ]; then
+# Guard: skip if fingerprint is malformed (no '/' separator)
+if [ -n "$FINGERPRINT" ] && echo "$FINGERPRINT" | grep -q '/'; then
   # Parse: brand / product / device:tag ...
   FP_BRAND="${FINGERPRINT%%/*}"
   AFTER_BRAND="${FINGERPRINT#*/}"      # product/device:user/...

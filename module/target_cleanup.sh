@@ -43,8 +43,10 @@ while IFS= read -r line; do
   fi
 done < "$TARGET"
 
-# Ensure trailing newline
-[ -s "$TMP" ] && printf '\n' >> "$TMP"
+# Ensure exactly one trailing newline (no accumulation across runs)
+if [ -s "$TMP" ]; then
+  tail -c1 "$TMP" 2>/dev/null | od -An -tx1 2>/dev/null | grep -q '0a' || printf '\n' >> "$TMP"
+fi
 
 if ! cmp -s "$TMP" "$TARGET" 2>/dev/null; then
   mv "$TMP" "$TARGET"
