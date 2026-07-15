@@ -10,12 +10,12 @@ for proc in TEESimulator supervisor daemon; do
         kill -9 "$pid" 2>/dev/null
     done
 done
-pkill -9 -f TEESimulator 2>/dev/null || true
-pkill -9 -f org.matrix.TEESimulator 2>/dev/null || true
+for pid in $(pidof TEESimulator 2>/dev/null); do kill -9 "$pid" 2>/dev/null; done
+for pid in $(pidof org.matrix.TEESimulator 2>/dev/null); do kill -9 "$pid" 2>/dev/null; done
 
 # Kill GMS + Vending so they reload without our hooks
-killall -9 com.google.android.gms.unstable 2>/dev/null
-killall -9 com.google.android.gms 2>/dev/null
+for pid in $(pidof com.google.android.gms.unstable 2>/dev/null); do kill -9 "$pid" 2>/dev/null; done
+for pid in $(pidof com.google.android.gms 2>/dev/null); do kill -9 "$pid" 2>/dev/null; done
 am force-stop com.android.vending 2>/dev/null
 
 # Wipe TEESimulator runtime state
