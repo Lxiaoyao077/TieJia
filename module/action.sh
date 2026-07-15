@@ -109,21 +109,29 @@ apply_pif() {
 #    was actually produced) — a stale one must not count as success.
 if [ -x "$MODPATH/pif_native_fetch.sh" ]; then
     if command -v timeout >/dev/null 2>&1; then
-        timeout 25 sh "$MODPATH/pif_native_fetch.sh" >"$CONFIG_DIR/autopif.log" 2>&1 && FP_OK=1
+        timeout 25 sh "$MODPATH/pif_native_fetch.sh" >"$CONFIG_DIR/autopif_native.log" 2>&1 && FP_OK=1
     else
-        sh "$MODPATH/pif_native_fetch.sh" >"$CONFIG_DIR/autopif.log" 2>&1 && FP_OK=1
+        sh "$MODPATH/pif_native_fetch.sh" >"$CONFIG_DIR/autopif_native.log" 2>&1 && FP_OK=1
     fi
     [ "$FP_OK" = 1 ] && FP_SRC="native"
 fi
 
 if [ "$FP_OK" = 0 ]; then
-    # Show last error lines so user can see what failed
     echo ""
-    echo "  ── 错误日志 (最后8行) ──"
-    sed -n '/^\[/,$p' "$CONFIG_DIR/autopif.log" 2>/dev/null | tail -n8 | while IFS= read -r line; do
-        row "  " "$line"
-    done
-    [ -z "$(head -n1 "$CONFIG_DIR/autopif.log" 2>/dev/null)" ] && row "  " "(空 — 脚本未输出任何错误)"
+    echo "  ── 原生抓取日志 ──"
+    if [ -s "$CONFIG_DIR/autopif_native.log" ]; then
+        grep 'pif_native_fetch:' "$CONFIG_DIR/autopif_native.log" 2>/dev/null | while IFS= read -r line; do
+            row "  " "$line"
+        done
+        # If no prefixed lines found, fall back to last 6 lines
+        if [ -z "$(grep 'pif_native_fetch:' "$CONFIG_DIR/autopif_native.log" 2>/dev/null)" ]; then
+            tail -n6 "$CONFIG_DIR/autopif_native.log" 2>/dev/null | while IFS= read -r line; do
+                row "  " "$line"
+            done
+        fi
+    else
+        row "  " "(无日志 — 原生抓取可能未执行)"
+    fi
     echo ""
     row "🔄" "尝试备用方案..."
     sleep 1
@@ -132,9 +140,9 @@ if [ "$FP_OK" = 0 ]; then
     #    Bounded so its stalling crawl can't freeze the Action.
     if [ -f "$MODPATH/autopif4.sh" ]; then
         if command -v timeout >/dev/null 2>&1; then
-            timeout 40 sh "$MODPATH/autopif4.sh" -s -m >>"$CONFIG_DIR/autopif.log" 2>&1 && FP_OK=1
+            timeout 40 sh "$MODPATH/autopif4.sh" -s -m >>"$CONFIG_DIR/autopif_native.log" 2>&1 && FP_OK=1
         else
-            sh "$MODPATH/autopif4.sh" -s -m >>"$CONFIG_DIR/autopif.log" 2>&1 && FP_OK=1
+            sh "$MODPATH/autopif4.sh" -s -m >>"$CONFIG_DIR/autopif_native.log" 2>&1 && FP_OK=1
         fi
         [ "$FP_OK" = 1 ] && FP_SRC="pif"
     fi
