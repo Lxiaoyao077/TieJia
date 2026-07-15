@@ -252,13 +252,20 @@ if [ ! -f "$CONFIG_DIR/.bootstrapped" ]; then
     log_save "AlwaysStrong-boot" "first boot: starting bootstrap"
 
     # 1. keybox
-    if [ -x "$MODDIR/keybox_fetch.sh" ]; then
+    if [ ! -f /data/adb/tricky_store/custom_keybox ] && [ -x "$MODDIR/keybox_fetch.sh" ]; then
         sh "$MODDIR/keybox_fetch.sh" 2>&1 | log -t "AlwaysStrong-boot"
     fi
 
-    # 2. fingerprint + security patch (Pixel Canary via pif_native_fetch)
+    # 2. fingerprint + security patch. native crawl (primary) fetches AND runs
+    #    migrate.sh -> custom.pif.prop (the file PIF reads), fast; autopif4 (whose
+    #    crawl hangs on some devices) is the fallback. Both produce custom.pif.prop.
+    FP_DONE=0
     if [ -x "$MODDIR/pif_native_fetch.sh" ]; then
-        sh "$MODDIR/pif_native_fetch.sh" -s -m 2>&1 | log -t "AlwaysStrong-boot"
+        sh "$MODDIR/pif_native_fetch.sh" >/data/adb/tricky_store/autopif.log 2>&1 && FP_DONE=1
+        cat /data/adb/tricky_store/autopif.log 2>/dev/null | log -t "AlwaysStrong-boot"
+    fi
+    if [ "$FP_DONE" = 0 ] && [ -f "$MODDIR/autopif4.sh" ]; then
+        sh "$MODDIR/autopif4.sh" -s -m 2>&1 | log -t "AlwaysStrong-boot"
     fi
 
     # 2b. sync the attestation/system security patch to the fresh fingerprint
@@ -268,7 +275,8 @@ if [ ! -f "$CONFIG_DIR/.bootstrapped" ]; then
     [ -x "$MODDIR/prop_unify.sh" ] && MODPATH="$MODDIR" sh "$MODDIR/prop_unify.sh" 2>&1 | log -t "AlwaysStrong-unify"
 
     # 3. enforce STRONG-friendly settings on every produced pif.prop variant
-    for CPIF in /data/adb/tricky_store/custom.pif.prop /data/adb/tricky_store/pif.prop; do
+    for CPIF in "$MODDIR/custom.pif.prop" "$MODDIR/pif.prop" \
+                /data/adb/tricky_store/custom.pif.prop /data/adb/tricky_store/pif.prop; do
         [ -f "$CPIF" ] || continue
         for kv in "spoofProvider=0" "spoofVendingFinger=1" "spoofBuild=1" \
                   "spoofProps=1" "spoofSignature=0" "spoofVendingSdk=0"; do
@@ -318,12 +326,36 @@ fi
         esac
         [ "$INT" -lt 60 ] && INT=60
         sleep "$INT"
-        if [ ! -f "$CFG/no_auto_fp" ] && [ -x "$MODDIR/pif_native_fetch.sh" ]; then
-            sh "$MODDIR/pif_native_fetch.sh" -s -m 2>&1 | log -t "AlwaysStrong-hourly"
+        if [ ! -f "$CFG/no_auto_fp" ]; then
+            FP_DONE=0
+            if [ -x "$MODDIR/pif_native_fetch.sh" ]; then
+                sh "$MODDIR/pif_native_fetch.sh" >"$CFG/autopif.log" 2>&1 && FP_DONE=1
+                cat "$CFG/autopif.log" 2>/dev/null | log -t "AlwaysStrong-hourly"
+            fi
+            if [ "$FP_DONE" = 0 ] && [ -f "$MODDIR/autopif4.sh" ]; then
+                sh "$MODDIR/autopif4.sh" -s -m 2>&1 | log -t "AlwaysStrong-hourly"
+            fi
             [ -f "$MODDIR/sync_patch.sh" ] && sh "$MODDIR/sync_patch.sh" 2>&1 | log -t "AlwaysStrong-hourly"
+            # enforce STRONG spoof settings — migrate.sh (run by native fetch /
+            # autopif4) resets them to spoofProvider=1 / spoofVendingFinger=0,
+            # which breaks STRONG. Without this the hourly refresh silently
+            # reverts the fingerprint to a WEAK config an hour after boot.
+            for CPIF in "$MODDIR/custom.pif.prop" "$MODDIR/pif.prop" \
+                        /data/adb/tricky_store/custom.pif.prop /data/adb/tricky_store/pif.prop; do
+                [ -f "$CPIF" ] || continue
+                for kv in "spoofProvider=0" "spoofVendingFinger=1" "spoofBuild=1" \
+                          "spoofProps=1" "spoofSignature=0" "spoofVendingSdk=0"; do
+                    k="${kv%=*}"; v="${kv#*=}"
+                    if grep -qE "^${k}=" "$CPIF"; then
+                        $SED "s|^${k}=.*|${k}=${v}|" "$CPIF"
+                    else
+                        echo "${k}=${v}" >> "$CPIF"
+                    fi
+                done
+            done
             [ -x "$MODDIR/prop_unify.sh" ] && MODPATH="$MODDIR" sh "$MODDIR/prop_unify.sh" 2>&1 | log -t "AlwaysStrong-unify"
         fi
-        if [ ! -f "$CFG/no_auto_keybox" ] && [ -x "$MODDIR/keybox_fetch.sh" ]; then
+        if [ ! -f "$CFG/custom_keybox" ] && [ ! -f "$CFG/no_auto_keybox" ] && [ -x "$MODDIR/keybox_fetch.sh" ]; then
             kbout=$(sh "$MODDIR/keybox_fetch.sh" 2>&1)
             kbrc=$?
             [ -n "$kbout" ] && echo "$kbout" | log -t "AlwaysStrong-hourly"
