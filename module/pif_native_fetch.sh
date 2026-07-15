@@ -37,6 +37,17 @@ TIMEOUT=10
 
 log() { echo "pif_native_fetch: $*"; }
 
+# ---- Resolve tools (via common_func.sh) ----
+SELF_DIR=$(cd "${0%/*}" 2>/dev/null && pwd)
+[ -z "$SELF_DIR" ] && SELF_DIR=/data/adb/modules/tricky_store
+[ -f "$SELF_DIR/common_func.sh" ] && . "$SELF_DIR/common_func.sh"
+resolve_asfetch "$SELF_DIR"
+resolve_bb
+
+TIMEOUT=10
+
+log() { echo "pif_native_fetch: $*"; }
+
 # ---- Resolve the module dir + asfetch binary ----
 SELF_DIR=$(cd "${0%/*}" 2>/dev/null && pwd)
 [ -z "$SELF_DIR" ] && SELF_DIR=/data/adb/modules/tricky_store
