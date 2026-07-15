@@ -71,7 +71,7 @@ aggressive_disabled=0
 moderate_warned=0
 passive_found=0
 
-echo "$CONFLICT_MODULES" | while IFS=: read -r mod_path level mod_id; do
+while IFS=: read -r mod_path level mod_id; do
     [ -z "$mod_path" ] && continue
     [ -d "$mod_path" ] || continue
     [ -f "$mod_path/disable" ] && continue  # 已禁用则跳过
@@ -109,7 +109,9 @@ echo "$CONFLICT_MODULES" | while IFS=: read -r mod_path level mod_id; do
             passive_found=$((passive_found + 1))
             ;;
     esac
-done
+done <<-HEREDOC
+$CONFLICT_MODULES
+HEREDOC
 
 # =============================================
 # 写入冲突报告
