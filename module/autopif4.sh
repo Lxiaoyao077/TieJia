@@ -17,8 +17,7 @@ until [ -z "$1" ]; do
   esac;
 done;
 
-echo "Pixel Canary pif.prop generator script \
-  \n  by osm0sis @ xda-developers";
+echo "Pixel Canary pif.prop generator script";
 
 case "$0" in
   */*.sh) DIR="$0";;
