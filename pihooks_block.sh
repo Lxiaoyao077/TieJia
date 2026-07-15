@@ -103,11 +103,11 @@ if $PIHOOKS_DETECTED; then
     done
 
     # 清除可能已写入的冲突属性
-    resetprop -d ro.product.brand 2>/dev/null || true
-    resetprop -d ro.product.manufacturer 2>/dev/null || true
-    resetprop -d ro.product.model 2>/dev/null || true
-    resetprop -d ro.product.name 2>/dev/null || true
-    resetprop -d ro.product.device 2>/dev/null || true
+    resetprop -n ro.product.brand "" 2>/dev/null || true
+    resetprop -n ro.product.manufacturer "" 2>/dev/null || true
+    resetprop -n ro.product.model "" 2>/dev/null || true
+    resetprop -n ro.product.name "" 2>/dev/null || true
+    resetprop -n ro.product.device "" 2>/dev/null || true
 
     log_save "AlwaysStrong: PIHooks blocked ($(getprop persist.sys.pihooks.first_api_level 2>/dev/null))"
 else
