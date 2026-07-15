@@ -136,7 +136,7 @@ if ! $LSPOSED_ACTIVE; then
     for prop in $LSPOSED_PROPS; do
         current_val="$(getprop "$prop" 2>/dev/null)"
         if [ -n "$current_val" ]; then
-            resetprop -d "$prop" 2>/dev/null || true
+            resetprop -n "$prop" "" 2>/dev/null || true
             log_save "AlwaysStrong: cleared prop $prop"
         fi
     done
