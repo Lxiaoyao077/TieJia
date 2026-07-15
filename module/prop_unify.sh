@@ -29,7 +29,7 @@ set_prop() {
 }
 
 del_prop() {
-  resetprop --delete "$1" 2>/dev/null
+  resetprop -n "$1" "" 2>/dev/null
 }
 
 # ----- main -----
