@@ -20,6 +20,10 @@ esac
 [ -z "$MODPATH" ] && MODPATH="$PWD"
 CONFIG_DIR=/data/adb/tricky_store
 MODE="${1:-}"
+# portable sed -i
+. "$MODPATH/common_func.sh" 2>/dev/null
+find_sed
+
 
 # --- find the dotted patch (YYYY-MM-DD) from a pif file -------------------
 SP=""
@@ -68,7 +72,7 @@ printf 'all=%s\n' "$DOT" > "$CONFIG_DIR/security_patch.txt"
 for pf in "$CONFIG_DIR/custom.pif.prop"; do
     [ -f "$pf" ] || continue
     if grep -qE '^[#]?\*\.security_patch=' "$pf"; then
-        sed -i "s|^[#]\?\*\.security_patch=.*|*.security_patch=$DOT|" "$pf"
+        $SED "s|^[#]\?\*\.security_patch=.*|*.security_patch=$DOT|" "$pf"
     else
         printf '*.security_patch=%s\n' "$DOT" >> "$pf"
     fi
