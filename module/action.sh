@@ -117,6 +117,14 @@ if [ -x "$MODPATH/pif_native_fetch.sh" ]; then
 fi
 
 if [ "$FP_OK" = 0 ]; then
+    # Show last error lines so user can see what failed
+    echo ""
+    echo "  ── 错误日志 (最后8行) ──"
+    sed -n '/^\[/,$p' "$CONFIG_DIR/autopif.log" 2>/dev/null | tail -n8 | while IFS= read -r line; do
+        row "  " "$line"
+    done
+    [ -z "$(head -n1 "$CONFIG_DIR/autopif.log" 2>/dev/null)" ] && row "  " "(空 — 脚本未输出任何错误)"
+    echo ""
     row "🔄" "尝试备用方案..."
     sleep 1
 
