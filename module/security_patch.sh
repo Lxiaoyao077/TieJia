@@ -4,10 +4,9 @@
 
 MODDIR=$(cd "${0%/*}" 2>/dev/null && pwd)
 [ -z "$MODDIR" ] && MODDIR="/data/adb/modules/tricky_store"
-AUTO_FLAG="/data/adb/tricky_store/pif_auto_security_patch"
+AUTO_FLAG="$MODDIR/../pif_auto_security_patch"
 
 # source shared helpers (provides find_sed)
-MODDIR=$(cd "${0%/*}" 2>/dev/null && pwd)
 [ -f "$MODDIR/common_func.sh" ] && . "$MODDIR/common_func.sh"
 find_sed
 
