@@ -5,7 +5,7 @@
 # delprop_if_exist <prop name>
 delprop_if_exist() {
     local NAME="$1"
-    [ -n "$(resetprop "$NAME")" ] && resetprop --delete "$NAME"
+    [ -n "$(resetprop "$NAME")" ] && resetprop -n "$NAME" ""
 }
 
 RESETPROP="resetprop -n"
