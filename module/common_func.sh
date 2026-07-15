@@ -22,7 +22,7 @@ resetprop_hexpatch() {
     local CURVALUE
     CURVALUE="$(resetprop "$NAME")"
 
-    [ ! "$NEWVALUE" -o ! "$CURVALUE" ] && return 1
+    { [ -z "$NEWVALUE" ] || [ -z "$CURVALUE" ]; } && return 1
     [ "$NEWVALUE" = "$CURVALUE" -a ! "$FORCE" ] && return 2
 
     local NEWLEN=${#NEWVALUE}
@@ -41,7 +41,7 @@ resetprop_hexpatch() {
 
     echo -ne "\x00\x00" \
         | dd obs=1 count=2 seek=$((NAMEOFFSET-96)) conv=notrunc of="$PROPFILE"
-    echo -ne "$(printf "$NEWHEX" | sed -e 's/.\{2\}/&\\x/g' -e 's/^/\\x/' -e 's/\\x$//')" \
+    echo -ne "$(printf '%s' "$NEWHEX" | sed -e 's/.\{2\}/&\\x/g' -e 's/^/\\x/' -e 's/\\x$//')" \
         | dd obs=1 count=93 seek=$((NAMEOFFSET-93)) conv=notrunc of="$PROPFILE"
 }
 
@@ -168,4 +168,50 @@ log_save() {
   )
   # Also send to logd (may be suppressed)
   echo "$msg" | log -t "$tag" 2>/dev/null
+}
+
+# --- Shared downloader tool resolution (dedup from action.sh / keybox_fetch.sh / pif_native_fetch.sh) ---
+# Call resolve_asfetch first, then use dl_out / dl_to anywhere.
+
+ASFETCH=""
+resolve_asfetch() {
+    local sdir="${1:-$(cd "${0%/*}" 2>/dev/null && pwd)}"
+    [ -z "$sdir" ] && sdir=/data/adb/modules/tricky_store
+    case "$(uname -m)" in
+        aarch64)        ABI=arm64-v8a ;;
+        armv7*|armv8l)  ABI=armeabi-v7a ;;
+        x86_64)         ABI=x86_64 ;;
+        i?86)           ABI=x86 ;;
+        *)              ABI="" ;;
+    esac
+    [ -n "$ABI" ] && [ -x "$sdir/bin/$ABI/asfetch" ] && ASFETCH="$sdir/bin/$ABI/asfetch"
+}
+
+BB=""
+resolve_bb() {
+    [ -n "$BB" ] && return 0
+    for bb in /data/adb/magisk/busybox /data/adb/ksu/bin/busybox /data/adb/ap/bin/busybox               /data/adb/modules/busybox-ndk/system/*/busybox; do
+        [ -x "$bb" ] && BB="$bb" && return 0
+    done
+    return 1
+}
+
+# dl_out <url> — fetch to stdout via best available tool
+dl_out() {
+    if [ -n "$ASFETCH" ]; then $ASFETCH -T 20 "$1" 2>/dev/null && return 0; fi
+    resolve_bb
+    if [ -n "$BB" ]; then $BB wget -q -T 20 -O - "$1" 2>/dev/null && return 0; fi
+    if command -v curl >/dev/null 2>&1; then curl -fsSL --max-time 20 "$1" 2>/dev/null && return 0; fi
+    if command -v wget >/dev/null 2>&1; then wget -q -T 20 -O - "$1" 2>/dev/null && return 0; fi
+    return 1
+}
+
+# dl_to <dst> <url> — fetch to file via best available tool
+dl_to() {
+    if [ -n "$ASFETCH" ]; then rm -f "$1"; $ASFETCH -T 60 -o "$1" "$2" 2>/dev/null; [ -s "$1" ] && return 0; fi
+    resolve_bb
+    if [ -n "$BB" ]; then rm -f "$1"; $BB wget -q -T 60 -O "$1" "$2" 2>/dev/null; [ -s "$1" ] && return 0; fi
+    if command -v curl >/dev/null 2>&1; then rm -f "$1"; curl -fsSL --max-time 60 -o "$1" "$2" 2>/dev/null; [ -s "$1" ] && return 0; fi
+    if command -v wget >/dev/null 2>&1; then rm -f "$1"; wget -q -T 60 -O "$1" "$2" 2>/dev/null; [ -s "$1" ] && return 0; fi
+    return 1
 }
