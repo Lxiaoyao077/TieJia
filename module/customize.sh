@@ -90,7 +90,7 @@ for f in module.prop service.sh post-fs-data.sh action.sh \
          uninstall.sh common_func.sh sepolicy.rule \
          keybox_fetch.sh build_target_txt.sh status_fetch.sh description.txt \
          rom_spoof_block.sh conflict_scan.sh sync_patch.sh \
-         autopif.sh security_patch.sh \
+         security_patch.sh \
          daemon ; do
   install_file "$f" "$MODPATH"
 done
@@ -161,7 +161,7 @@ fi
 # --- /data/adb/tricky_store config ----------------------------------------
 mkdir -p "$CONFIG_DIR"
 
-# Tell PIF zygisk NOT to auto-generate pif.prop (handled by autopif.sh)
+# Tell PIF zygisk NOT to auto-generate pif.prop (handled by pif_native_fetch.sh)
 touch /data/adb/pif_script_only 2>/dev/null
 
 if [ -f "$CONFIG_DIR/keybox.xml" ]; then
