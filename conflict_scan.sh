@@ -91,12 +91,12 @@ while IFS=: read -r mod_path level mod_id; do
             # 如果是 PIF 类模块，同时移除其 props 覆盖
             case "$mod_id" in
                 PIF|USNF)
-                    resetprop -d ro.product.model 2>/dev/null || true
-                    resetprop -d ro.product.brand 2>/dev/null || true
-                    resetprop -d ro.product.name 2>/dev/null || true
-                    resetprop -d ro.product.device 2>/dev/null || true
-                    resetprop -d ro.product.manufacturer 2>/dev/null || true
-                    resetprop -d ro.build.fingerprint 2>/dev/null || true
+                    resetprop -n ro.product.model "" 2>/dev/null || true
+                    resetprop -n ro.product.brand "" 2>/dev/null || true
+                    resetprop -n ro.product.name "" 2>/dev/null || true
+                    resetprop -n ro.product.device "" 2>/dev/null || true
+                    resetprop -n ro.product.manufacturer "" 2>/dev/null || true
+                    resetprop -n ro.build.fingerprint "" 2>/dev/null || true
                     ;;
             esac
             ;;
