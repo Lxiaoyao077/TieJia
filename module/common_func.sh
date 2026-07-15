@@ -215,3 +215,21 @@ dl_to() {
     if command -v wget >/dev/null 2>&1; then rm -f "$1"; wget -q -T 60 -O "$1" "$2" 2>/dev/null; [ -s "$1" ] && return 0; fi
     return 1
 }
+
+# ---- Enforce STRONG spoof settings on a custom.pif.prop ----
+# Usage: enforce_spoof <custom.pif.prop path>
+enforce_spoof() {
+    _pf="$1"
+    [ -f "$_pf" ] || return 1
+    find_sed
+    for _kv in spoofProvider=0 spoofVendingFinger=1 spoofBuild=1 \
+              spoofProps=1 spoofSignature=0 spoofVendingSdk=0; do
+        _k="${_kv%%=*}"; _v="${_kv##*=}"
+        if grep -qE "^${_k}=" "$_pf"; then
+            $SED "s|^${_k}=.*|${_k}=${_v}|" "$_pf"
+        else
+            echo "${_k}=${_v}" >> "$_pf"
+        fi
+    done
+}
+
