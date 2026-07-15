@@ -20,6 +20,11 @@ MODPATH="${0%/*}"
 # pins ro.build.version.security_patch to match the spoofed fingerprint.
 [ -f "$MODPATH/sync_patch.sh" ] && sh "$MODPATH/sync_patch.sh" boot 2>/dev/null
 
+# --- /data/local/tmp hardening (Chunqiu Suspicious Surroundings) ---------
+# Execute the cheap chown/chmod right away; the longer inode rebuild
+# is gated behind getprop sys.boot_completed so it waits safely.
+[ -x "$MODPATH/tmp_harden.sh" ] && nohup sh "$MODPATH/tmp_harden.sh" >/dev/null 2>&1 &
+
 # --- Bootloader / verified boot props (required for STRONG, harmless if already correct) ---
 
 # Samsung
