@@ -27,10 +27,10 @@ esac;
 DIR=$(dirname "$(readlink -f "$DIR" 2>/dev/null || echo "$DIR")");
 [ -z "$DIR" ] && DIR=/data/adb/modules/tricky_store
 
-item() { echo "\n- $@"; }
-die() { echo "\nError: $@!"; exit 1; }
+item() { printf '\n- %s\n' "$@"; }
+die() { printf '\nError: %s!\n' "$*"; exit 1; }
 die_bb() { die "$@, install busybox"; }
-warn() { echo "\nWarning: $@!"; }
+warn() { printf '\nWarning: %s!\n' "$*"; }
 
 find_busybox() {
   [ -n "$BUSYBOX" ] && return 0;
@@ -79,7 +79,7 @@ if date -D '%s' -d "$(date '+%s')" 2>&1 | grep -qE "bad date|invalid option"; th
   fi;
 fi;
 
-if ! echo "A\nB" | grep -m1 -A1 "A" | grep -q "B"; then
+if ! printf 'A\nB\n' | grep -m1 -A1 'A' | grep -q 'B'; then
   if ! find_busybox; then
     die_bb "grep broken";
   else
@@ -116,7 +116,7 @@ item "Selecting Pixel Beta device ...";
 if [ -z "$PRODUCT" ]; then
   set_random_beta() {
     local list_count="$(echo "$MODEL_LIST" | wc -l)";
-    local list_rand="$((RANDOM % $list_count + 1))";
+    local list_rand="$(( $(od -An -N2 -tu2 /dev/urandom) % $list_count + 1 ))";
     local IFS=$'\n';
     set -- $MODEL_LIST;
     MODEL="$(eval echo \${$list_rand})";
@@ -229,7 +229,7 @@ if [ -f "$MIGRATE" ]; then
     done;
   fi;
   [ "$PATCH_COMMENT" ] && sed_i -i 's;\*.security_patch;#\*.security_patch;' custom.pif.prop;
-  echo "\n# Canary Released: $CANARY_REL_DATE\n# Estimated Expiry: $CANARY_EXP_DATE" >> custom.pif.prop;
+  printf '\n# Canary Released: %s\n' $CANARY_REL_DATE\n# Estimated Expiry: $CANARY_EXP_DATE" >> custom.pif.prop;
   cat custom.pif.prop;
 fi;
 
