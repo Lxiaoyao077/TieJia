@@ -19,7 +19,7 @@
 # ---- Parse flags (compatible with autopif.sh / autopif4.sh callers) ----
 DEBUG=0
 STEP=0
-step() { STEP=$((STEP+1)); [ "$DEBUG" = 1 ] && log "[step $STEP/6] $*"; }
+step() { STEP=$((STEP+1)); [ "$DEBUG" = 1 ] && log "[step $STEP] $*"; }
 # All three flags are effectively no-ops: this script already outputs STRONG-
 # friendly props and already does device matching. Kept for caller compatibility.
 FORCE_STRONG=1 FORCE_MATCH=1
@@ -241,7 +241,7 @@ SECURITY_PATCH=$SECURITY_PATCH
 DEVICE_INITIAL_SDK_INT=32
 EOF
 
-grep -q 'FINGERPRINT=google/.*/.*:CANARY/' "$TMP" || { log "[STEP 5 FAIL] generated pif.prop looks invalid"; }
+grep -q 'FINGERPRINT=google/.*/.*:CANARY/' "$TMP" || { log "[STEP 5 FAIL] generated pif.prop looks invalid"; exit 1; }
 
 mkdir -p "$CONFIG_DIR"
 cp -f "$TMP" "$TARGET" 2>/dev/null   # keep pif.prop for display + sync_patch
@@ -254,6 +254,7 @@ rm -f "$SELF_DIR/custom.pif.prop" "$SELF_DIR/custom.pif.json" 2>/dev/null
 sh "$SELF_DIR/migrate.sh" -i -a "$SELF_DIR/pif.prop" >/dev/null 2>&1
 if [ ! -s "$SELF_DIR/custom.pif.prop" ]; then
     log "[STEP 5 FAIL] migrate.sh ran but produced no custom.pif.prop"
+    exit 1
 fi
 
 # migrate.sh defaults to spoofProvider=1 / spoofVendingFinger=0, which asks for
