@@ -2,7 +2,8 @@
 
 # Tricky Store Security Patch Util
 
-MODDIR="/data/adb/modules/tricky_store"
+MODDIR=$(cd "${0%/*}" 2>/dev/null && pwd)
+[ -z "$MODDIR" ] && MODDIR="/data/adb/modules/tricky_store"
 AUTO_FLAG="/data/adb/tricky_store/pif_auto_security_patch"
 
 case "$1" in
