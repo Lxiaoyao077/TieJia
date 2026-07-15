@@ -11,16 +11,9 @@ MODDIR="${MODPATH:-$(dirname "$0")}"
 LOG_DIR="$MODDIR/logs"
 mkdir -p "$LOG_DIR" 2>/dev/null
 
-LOG_TAG="AlwaysStrong"
-
-LOG_FILE="$MODDIR/logs/module.log"
-log_private() {
-  local ts=$(date '+%m-%d %H:%M:%S' 2>/dev/null)
-  log -t "$LOG_TAG" "$@"
-  echo "[$ts] $*" >> "$LOG_FILE" 2>/dev/null
-  # Keep last 200 lines
-  tail -n 200 "$LOG_FILE" > "$LOG_FILE.tmp" 2>/dev/null && mv "$LOG_FILE.tmp" "$LOG_FILE" 2>/dev/null
-}
+# Source shared helpers (log_save, find_sed)
+[ -f "$MODDIR/common_func.sh" ] && . "$MODDIR/common_func.sh"
+find_sed
 
 # --- 1. Suppress our log tags via prop ---
 # Some ROMs have persist.log.tag.* props that control per-tag logging.
@@ -63,8 +56,8 @@ scrub_logcat() {
   for anr in /data/anr/anr_* /data/anr/traces.txt; do
     [ -f "$anr" ] && {
       grep -q "TEESimulator\|aswatcher\|AlwaysStrong" "$anr" 2>/dev/null && {
-        sed -i '/TEESimulator\|aswatcher\|AlwaysStrong\|libinject\|libTEESimulator/d' "$anr" 2>/dev/null
-        log_private "sanitized ANR: $anr"
+        $SED '/TEESimulator\|aswatcher\|AlwaysStrong\|libinject\|libTEESimulator/d' "$anr" 2>/dev/null
+        log_save "AlwaysStrong" "sanitized ANR: $anr"
         changed=1
       }
     }
@@ -74,14 +67,14 @@ scrub_logcat() {
   for tomb in /data/tombstones/tombstone_*; do
     [ -f "$tomb" ] && {
       grep -q "TEESimulator\|aswatcher\|AlwaysStrong" "$tomb" 2>/dev/null && {
-        sed -i '/TEESimulator\|aswatcher\|AlwaysStrong\|libinject\|libTEESimulator/d' "$tomb" 2>/dev/null
-        log_private "sanitized tombstone: $tomb"
+        $SED '/TEESimulator\|aswatcher\|AlwaysStrong\|libinject\|libTEESimulator/d' "$tomb" 2>/dev/null
+        log_save "AlwaysStrong" "sanitized tombstone: $tomb"
         changed=1
       }
     }
   done
 
-  [ "$changed" = 1 ] && log_private "logcat scrubbed"
+  [ "$changed" = 1 ] && log_save "AlwaysStrong" "logcat scrubbed"
 }
 
 # --- 3. Periodic scrub daemon ---
@@ -92,4 +85,4 @@ scrub_logcat() {
   done
 } &
 
-log_private "logcat cleanup initialized"
+log_save "AlwaysStrong" "logcat cleanup initialized"
