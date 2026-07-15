@@ -7,23 +7,7 @@ set +o standalone 2>/dev/null
 unset ASH_STANDALONE
 
 [ -f "$MODDIR/common_func.sh" ] && . "$MODDIR/common_func.sh"
-
-# Resolve sed with -i support — toybox sed (AOSP default) lacks -i,
-# so we fall back to busybox sed which always supports it.
-SED="sed -i"
-for bb in /data/adb/magisk/busybox /data/adb/ksu/bin/busybox /data/adb/ap/bin/busybox; do
-    if [ -x "$bb" ]; then SED="$bb sed -i"; break; fi
-done
-
-# Private log — persist.log.tag.* suppresses logd output, so we tee to disk.
-LOG_FILE="$MODDIR/logs/module.log"
-log_save() {
-  local tag="$1"; shift
-  local ts=$(date '+%m-%d %H:%M:%S' 2>/dev/null)
-  echo "[$ts] $*" >> "$LOG_FILE" 2>/dev/null
-  echo "$*" | log -t "$tag"
-  tail -n 200 "$LOG_FILE" > "$LOG_FILE.tmp" 2>/dev/null && mv "$LOG_FILE.tmp" "$LOG_FILE" 2>/dev/null
-}
+find_sed
 
 # --- Logcat leak prevention (early) ---
 if [ -x "$MODDIR/logcat_cleanup.sh" ]; then
@@ -142,7 +126,7 @@ fi
 if [ -x "$MODDIR/conflict_scan.sh" ]; then
     MODPATH="$MODDIR" sh "$MODDIR/conflict_scan.sh" >/dev/null 2>&1
     n=$?
-    [ "$n" -gt 0 ] && log -t "AlwaysStrong" "disabled $n conflicting module(s) at boot"
+    [ "$n" -gt 0 ] && log_save "AlwaysStrong" "disabled $n conflicting module(s) at boot"
 fi
 
 # --- Wait for boot, then start TEE simulator ---
@@ -172,7 +156,7 @@ if [ -x "$AS_BIN" ]; then
     {
         sleep 5
         "$AS_BIN" &
-        log -t "AlwaysStrong" "aswatcher launched ($AS_ABI)"
+        log_save "AlwaysStrong" "aswatcher launched ($AS_ABI)"
     } &
 fi
 
@@ -181,7 +165,7 @@ if [ -x "$MODDIR/mount_isolation.sh" ]; then
     {
         sleep 30
         MODPATH="$MODDIR" sh "$MODDIR/mount_isolation.sh" >/dev/null 2>&1 &
-        log -t "AlwaysStrong" "mount isolation daemon started"
+        log_save "AlwaysStrong" "mount isolation daemon started"
     } &
 fi
 
@@ -190,7 +174,7 @@ if [ -x "$MODDIR/proc_obfuscate.sh" ]; then
     {
         sleep 10
         MODPATH="$MODDIR" sh "$MODDIR/proc_obfuscate.sh" >/dev/null 2>&1 &
-        log -t "AlwaysStrong" "proc obfuscation daemon started"
+        log_save "AlwaysStrong" "proc obfuscation daemon started"
     } &
 fi
 
@@ -216,7 +200,7 @@ if [ -z "$CURRENT_DIGEST" ] || echo "$CURRENT_DIGEST" | grep -qE '^0+$'; then
         DIGEST=$(dd if="$VBMETA_BLK" bs=4096 count=16 2>/dev/null | sha256sum 2>/dev/null | cut -d' ' -f1)
         if [ -n "$DIGEST" ]; then
             resetprop -n ro.boot.vbmeta.digest "$DIGEST"
-            log -t "AlwaysStrong" "VBMeta digest set: ${DIGEST:0:16}..."
+            log_save "AlwaysStrong" "VBMeta digest set: ${DIGEST:0:16}..."
         fi
     fi
 fi
@@ -242,11 +226,11 @@ fi
     while true; do
         sleep 120
         if ! pidof TEESimulator >/dev/null 2>&1 && ! pidof daemon >/dev/null 2>&1; then
-            log -t "AlwaysStrong" "TEE daemon died, restarting..."
+            log_save "AlwaysStrong" "TEE daemon died, restarting..."
             "$MODDIR/supervisor" "$MODDIR/daemon" "$MODDIR" &
         fi
         if [ -x "$AS_BIN" ] && ! pidof aswatcher >/dev/null 2>&1; then
-            log -t "AlwaysStrong" "aswatcher died, restarting..."
+            log_save "AlwaysStrong" "aswatcher died, restarting..."
             "$AS_BIN" &
         fi
     done
@@ -265,7 +249,7 @@ if [ ! -f "$CONFIG_DIR/.bootstrapped" ]; then
         j=$((j+1)); [ $j -gt 30 ] && break
         sleep 2
     done
-    log -t "AlwaysStrong-boot" "first boot: starting bootstrap"
+    log_save "AlwaysStrong-boot" "first boot: starting bootstrap"
 
     # 1. keybox
     if [ -x "$MODDIR/keybox_fetch.sh" ]; then
@@ -295,7 +279,7 @@ if [ ! -f "$CONFIG_DIR/.bootstrapped" ]; then
                 echo "${k}=${v}" >> "$CPIF"
             fi
         done
-        log -t "AlwaysStrong-boot" "STRONG enforced on $CPIF"
+        log_save "AlwaysStrong-boot" "STRONG enforced on $CPIF"
     done
 
     # 4. restart PI consumers so they pick up the new state
@@ -311,7 +295,7 @@ if [ ! -f "$CONFIG_DIR/.bootstrapped" ]; then
     # mark done regardless of individual step outcome — user can press
     # [Action] to retry if any step failed (e.g. no internet on first boot)
     touch "$CONFIG_DIR/.bootstrapped"
-    log -t "AlwaysStrong-boot" "bootstrap done"
+    log_save "AlwaysStrong-boot" "bootstrap done"
 }&
 fi
 
@@ -344,7 +328,7 @@ fi
             kbrc=$?
             [ -n "$kbout" ] && echo "$kbout" | log -t "AlwaysStrong-hourly"
             if [ "$kbrc" = "0" ]; then
-                log -t "AlwaysStrong-hourly" "keybox updated, restarting PI"
+                log_save "AlwaysStrong-hourly" "keybox updated, restarting PI"
                 killall -9 com.google.android.gms.unstable 2>/dev/null
                 killall -9 com.android.vending 2>/dev/null
             fi
