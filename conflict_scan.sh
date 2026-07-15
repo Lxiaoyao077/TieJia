@@ -139,6 +139,7 @@ if [ ! -f "$TOGGLE_FILE" ]; then
         echo "gms_kill=enabled"
         echo "conflict_scan=enabled"
         echo "keybox_rotate=enabled"
+        echo "tmp_harden=enabled"
         echo "target_cleanup=enabled"
         echo "boot_hash=enabled"
     } > "$TOGGLE_FILE"
