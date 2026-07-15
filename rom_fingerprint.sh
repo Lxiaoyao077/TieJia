@@ -75,14 +75,16 @@ ro.oem_unlock_supported=0
 ro.boot.bootloader=unknown
 "
 
-echo "$SECURITY_PROPS" | while IFS='=' read -r prop val; do
+while IFS='=' read -r prop val; do
     [ -z "$prop" ] && continue
     current="$(getprop "$prop" 2>/dev/null)"
     if [ "$current" != "$val" ] && [ -n "$val" ]; then
         resetprop "$prop" "$val" 2>/dev/null || true
         fixed_count=$((fixed_count + 1))
     fi
-done
+done <<EOF
+$SECURITY_PROPS
+EOF
 
 # 4. ADB 调试标志清理
 DEBUG_PROPS="
@@ -99,13 +101,15 @@ ro.adb.nonblocking_ffs=0
 persist.sys.adb.notify=0
 "
 
-echo "$DEBUG_PROPS" | while IFS='=' read -r prop val; do
+while IFS='=' read -r prop val; do
     [ -z "$prop" ] && continue
     current="$(getprop "$prop" 2>/dev/null)"
     if [ "$current" != "$val" ]; then
         resetprop "$prop" "$val" 2>/dev/null || true
     fi
-done
+done <<EOF
+$DEBUG_PROPS
+EOF
 
 # 5. 清理 Magisk/KSU 可能泄露的属性
 MAGISK_PROPS="
