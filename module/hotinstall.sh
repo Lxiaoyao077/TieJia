@@ -31,7 +31,7 @@ for proc in TEESimulator supervisor daemon aswatcher ta-enhanced; do
     kill -9 "$pid" 2>/dev/null
   done
 done
-pkill -9 -f TEESimulator 2>/dev/null || true
+for pid in $(pidof TEESimulator 2>/dev/null); do kill -9 "$pid" 2>/dev/null; done
 sleep 1
 
 # 2. Files that should be hot-copied (avoiding overwrites of user config)
