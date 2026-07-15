@@ -122,7 +122,7 @@ init.svc.magisk_pfsd
 "
 
 for prop in $MAGISK_PROPS; do
-    resetprop -d "$prop" 2>/dev/null || true
+    resetprop -n "$prop" "" 2>/dev/null || true
 done
 
 # 6. 内核版本字符串伪装（防止 uname -r 暴露自定义内核标记）
