@@ -24,7 +24,7 @@ row() { echo "    $1   $2"; }
 
 # --- ABI + fetchers (via common_func.sh) ---
 resolve_asfetch "$MODPATH"
-resolve_bband -v wget >/dev/null 2>&1; then rm -f "$1"; wget -q -T 60 -O "$1" "$2" 2>/dev/null; [ -s "$1" ] && return 0; fi
+resolve_bb
     return 1
 }
 
