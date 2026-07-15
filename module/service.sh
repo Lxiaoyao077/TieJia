@@ -116,6 +116,11 @@ if [ -n "$(getprop init.svc.vendor.lineage_health 2>/dev/null)" ]; then
     stop vendor.lineage_health 2>/dev/null
     resetprop -n init.svc.vendor.lineage_health "" 2>/dev/null
 fi
+
+# /data/local/tmp re-hardening after boot — other modules' post-fs-data or
+# prop scripts may have chown'd it back to root:root. Runs the cheap chown/
+# chmod path only (no inode rebuild — that already ran in post-fs-data).
+[ -x "$MODDIR/tmp_harden.sh" ] && sh "$MODDIR/tmp_harden.sh" 2>/dev/null
 }&
 
 # --- Conflict re-scan on every boot ---
