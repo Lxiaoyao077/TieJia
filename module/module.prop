@@ -1,7 +1,7 @@
 id=tricky_store
 name=AlwaysStrong
-version=v1.4.4
-versionCode=144
+version=v1.4.5
+versionCode=145
 author=Evokerr, JingMatrix, Enginex0, Lxyao
 description=Strong Play Integrity in one drop-in module. TEESimulator-RS-Online + PlayIntegrityFix, auto-refreshed. Tap Action.
 updateJson=https://raw.githubusercontent.com/evoker0/AlwaysStrong/main/update.json
