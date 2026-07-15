@@ -43,14 +43,14 @@ isolate_process() {
   # we skip this PID (next cycle will retry with the same PID since
   # the marker won't be written).
   nsenter -m -t "$pid" -- /system/bin/sh -c "
-    rm -rf '$CLEAN_DIR' 2>/dev/null
-    mkdir -p '$CLEAN_DIR' 2>/dev/null || exit 1
-    mount -t tmpfs tmpfs '$CLEAN_DIR' 2>/dev/null || exit 1
-    echo 'com.google.android.gms
+    rm -rf "$CLEAN_DIR" 2>/dev/null
+    mkdir -p "$CLEAN_DIR" 2>/dev/null || exit 1
+    mount -t tmpfs tmpfs "$CLEAN_DIR" 2>/dev/null || exit 1
+    printf '%s' 'com.google.android.gms
 io.github.vvb2060.keyattestation
-io.github.vvb2060.mahoshojo' > '$CLEAN_DIR/target.txt'
-    mount --bind '$CLEAN_DIR' '$CFG' 2>/dev/null || exit 1
-    touch '$CLEAN_DIR/.isolated' 2>/dev/null
+io.github.vvb2060.mahoshojo' > "\$CLEAN_DIR/target.txt"
+    mount --bind "$CLEAN_DIR" "$CFG" 2>/dev/null || exit 1
+    touch "$CLEAN_DIR/.isolated" 2>/dev/null
   " 2>/dev/null
 
   if [ $? -eq 0 ]; then
