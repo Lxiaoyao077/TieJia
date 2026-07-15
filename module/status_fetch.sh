@@ -22,11 +22,11 @@ for bb in /data/adb/magisk/busybox /data/adb/ksu/bin/busybox /data/adb/ap/bin/bu
     [ -x "$bb" ] && BB="$bb" && break
 done
 if [ -n "$BB" ]; then
-    new=$("$BB" wget -T "$TIMEOUT" -qO - "$URL" 2>/dev/null | tr -d '\r\n' | head -c 64)
+    new=$("$BB" wget -T "$TIMEOUT" -qO - "$URL" 2>/dev/null | tr -d '\r\n' | dd bs=64 count=1 2>/dev/null)
 elif command -v curl >/dev/null 2>&1; then
-    new=$(curl -fsSL --max-time "$TIMEOUT" "$URL" 2>/dev/null | tr -d '\r\n' | head -c 64)
+    new=$(curl -fsSL --max-time "$TIMEOUT" "$URL" 2>/dev/null | tr -d '\r\n' | dd bs=64 count=1 2>/dev/null)
 elif command -v wget >/dev/null 2>&1; then
-    new=$(wget -q -T "$TIMEOUT" -O - "$URL" 2>/dev/null | tr -d '\r\n' | head -c 64)
+    new=$(wget -q -T "$TIMEOUT" -O - "$URL" 2>/dev/null | tr -d '\r\n' | dd bs=64 count=1 2>/dev/null)
 else
     exit 2
 fi
