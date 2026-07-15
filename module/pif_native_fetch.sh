@@ -46,11 +46,7 @@ resolve_bb
 
 TIMEOUT=10
 
-log() { echo "pif_native_fetch: $*"; }
-
-# ---- Resolve the module dir + asfetch binary ----
-SELF_DIR=$(cd "${0%/*}" 2>/dev/null && pwd)
-[ -z "$SELF_DIR" ] && SELF_DIR=/data/adb/modules/tricky_store
+# ---- Resolve asfetch binary (common_func already sourced above) ----
 case "$(uname -m)" in
     aarch64)        ABI=arm64-v8a ;;
     armv7*|armv8l)  ABI=armeabi-v7a ;;
