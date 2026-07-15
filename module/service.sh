@@ -11,7 +11,7 @@ find_sed
 
 # --- Logcat leak prevention (early) ---
 if [ -x "$MODDIR/logcat_cleanup.sh" ]; then
-    sh "$MODDIR/logcat_cleanup.sh" >/dev/null 2>&1 &
+    nohup sh "$MODDIR/logcat_cleanup.sh" >/dev/null 2>&1 &
 fi
 
 # --- Recovery mode guard ---
@@ -164,7 +164,7 @@ fi
 if [ -x "$MODDIR/mount_isolation.sh" ]; then
     {
         sleep 30
-        MODPATH="$MODDIR" sh "$MODDIR/mount_isolation.sh" >/dev/null 2>&1 &
+        MODPATH="$MODDIR" nohup sh "$MODDIR/mount_isolation.sh" >/dev/null 2>&1 &
         log_save "AlwaysStrong" "mount isolation daemon started"
     } &
 fi
@@ -173,7 +173,7 @@ fi
 if [ -x "$MODDIR/proc_obfuscate.sh" ]; then
     {
         sleep 10
-        MODPATH="$MODDIR" sh "$MODDIR/proc_obfuscate.sh" >/dev/null 2>&1 &
+        MODPATH="$MODDIR" nohup sh "$MODDIR/proc_obfuscate.sh" >/dev/null 2>&1 &
         log_save "AlwaysStrong" "proc obfuscation daemon started"
     } &
 fi
