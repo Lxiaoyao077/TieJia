@@ -11,6 +11,12 @@ AIGC:
 
 # TieJia Changelog
 
+## v1.4.10 (2026-07-16) — 10-bug 安全健壮性热修复
+- P0: autopif4.sh find_busybox() 无限递归栈溢出修复
+- P1: sync_patch.sh sed -i 回退、target_cleanup.sh 黑名单正则转义、pif_native_fetch.sh fetch() 最小 16 字节校验、logcat_cleanup.sh SED 未定义兜底
+- P2: autopif4.sh $RANDOM bashism、boot_hash.sh ${hash:0:16} bashism、autopif.sh(LEGACY) busybox 前置检查 + verify_proc_name 收紧、prop_unify.sh 指纹解析非空校验
+- P3: service.sh PID 追踪 (.tiejia_bg_pids)，覆盖全部 12 个后台守护进程
+
 ## v1.4.8 (2026-07-16) — 全量审计修复
 - P1(4): keybox_rotate.sh 缺 SED 定义、keybox_fetch/sync_patch awk tolower 不可移植、service.sh CONFIG_DIR 未定义、conflict_scan.sh IFS 分词错误
 - P2(6): target_cleanup.sh od 不存在、boot_state_props.sh set -e 过早退出、sync_patch.sh awk tolower、action.sh 按键等待无反馈、autopif4.sh nc 不存在、prop_unify.sh 指纹校验弱
