@@ -282,17 +282,7 @@ if [ ! -f "$CONFIG_DIR/.bootstrapped" ]; then
     # 3. enforce STRONG-friendly settings on every produced pif.prop variant
     for CPIF in "$MODDIR/custom.pif.prop" "$MODDIR/pif.prop" \
                 /data/adb/tricky_store/custom.pif.prop /data/adb/tricky_store/pif.prop; do
-        [ -f "$CPIF" ] || continue
-        for kv in "spoofProvider=0" "spoofVendingFinger=1" "spoofBuild=1" \
-                  "spoofProps=1" "spoofSignature=0" "spoofVendingSdk=0"; do
-            k="${kv%=*}"; v="${kv#*=}"
-            if grep -qE "^${k}=" "$CPIF"; then
-                $SED "s|^${k}=.*|${k}=${v}|" "$CPIF"
-            else
-                echo "${k}=${v}" >> "$CPIF"
-            fi
-        done
-        log_save "AlwaysStrong-boot" "STRONG enforced on $CPIF"
+        [ -f "$CPIF" ] && enforce_spoof "$CPIF" && log_save "AlwaysStrong-boot" "STRONG enforced on $CPIF"
     done
 
     # 4. restart PI consumers so they pick up the new state
@@ -347,16 +337,7 @@ fi
             # reverts the fingerprint to a WEAK config an hour after boot.
             for CPIF in "$MODDIR/custom.pif.prop" "$MODDIR/pif.prop" \
                         /data/adb/tricky_store/custom.pif.prop /data/adb/tricky_store/pif.prop; do
-                [ -f "$CPIF" ] || continue
-                for kv in "spoofProvider=0" "spoofVendingFinger=1" "spoofBuild=1" \
-                          "spoofProps=1" "spoofSignature=0" "spoofVendingSdk=0"; do
-                    k="${kv%=*}"; v="${kv#*=}"
-                    if grep -qE "^${k}=" "$CPIF"; then
-                        $SED "s|^${k}=.*|${k}=${v}|" "$CPIF"
-                    else
-                        echo "${k}=${v}" >> "$CPIF"
-                    fi
-                done
+                [ -f "$CPIF" ] && enforce_spoof "$CPIF"
             done
             [ -x "$MODDIR/prop_unify.sh" ] && MODPATH="$MODDIR" sh "$MODDIR/prop_unify.sh" 2>&1 | log -t "AlwaysStrong-unify"
         fi
