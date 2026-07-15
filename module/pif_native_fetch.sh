@@ -178,7 +178,13 @@ esac
 if [ -z "$PRODUCT" ]; then
     N=$(echo "$PRODUCT_LIST" | grep -c .)
     [ "${N:-0}" -lt 1 ] && { log "empty device list."; exit 1; }
-    R="${RANDOM:-$$}"
+    # Get a random number from /dev/urandom (POSIX-safe, works everywhere)
+    R=0
+    if [ -r /dev/urandom ]; then
+        R=$(od -A n -t u4 -N 4 /dev/urandom 2>/dev/null | tr -d " \n")
+        [ -z "$R" ] && R=0
+    fi
+    [ "$R" = 0 ] && R=$$
     IDX=$(( (R % N) + 1 ))
     MODEL=$(echo "$MODEL_LIST"   | sed -n "${IDX}p")
     PRODUCT=$(echo "$PRODUCT_LIST" | sed -n "${IDX}p")
@@ -249,11 +255,12 @@ fi
 # a WEAK attestation and breaks STRONG. Enforce the STRONG settings here so the
 # native path is correct no matter who calls it (boot, hourly, Action) — the
 # hourly loop has no separate enforce step, so self-enforcing is essential.
+find_sed  # portable sed -i (toybox sed lacks -i)
 for kv in spoofProvider=0 spoofVendingFinger=1 spoofBuild=1 \
           spoofProps=1 spoofSignature=0 spoofVendingSdk=0; do
     k="${kv%=*}"; v="${kv#*=}"
     if grep -qE "^${k}=" "$SELF_DIR/custom.pif.prop"; then
-        sed -i "s|^${k}=.*|${k}=${v}|" "$SELF_DIR/custom.pif.prop"
+        $SED "s|^${k}=.*|${k}=${v}|" "$SELF_DIR/custom.pif.prop"
     else
         echo "${k}=${v}" >> "$SELF_DIR/custom.pif.prop"
     fi
