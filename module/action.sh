@@ -25,8 +25,6 @@ row() { echo "    $1   $2"; }
 # --- ABI + fetchers (via common_func.sh) ---
 resolve_asfetch "$MODPATH"
 resolve_bb
-    return 1
-}
 
 # --- Header ---
 echo ""
