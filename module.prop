@@ -1,0 +1,10 @@
+id=tricky_store
+name=TieJia
+version=v1.2.1
+versionCode=121
+author=Evokerr, JingMatrix, Enginex0, KOWX712, Lxiaoyao
+description=Strong Play Integrity in one drop-in module. TEESimulator-RS-Online + PlayIntegrityFix, auto-refreshed. Tap Action.
+updateJson=https://raw.githubusercontent.com/Lxiaoyao077/TieJia/main/update.json
+support=https://t.me/keyboxstrong
+donate=https://coindrop.to/evokerrr
+banner=banner.png
