@@ -298,8 +298,7 @@ if [ ! -f "$CONFIG_DIR/.bootstrapped" ]; then
     # 3. enforce STRONG on every pif.prop
     for CPIF in /data/adb/tricky_store/custom.pif.prop /data/adb/tricky_store/pif.prop; do
         [ -f "$CPIF" ] || continue
-        for kv in "spoofProvider=0" "spoofVendingFinger=1" "spoofBuild=1" \
-                  "spoofProps=1" "spoofSignature=0" "spoofVendingSdk=0"; do
+        for kv in $SPOOF_SETTINGS; do
             k="${kv%=*}"; v="${kv#*=}"
             if grep -qE "^${k}=" "$CPIF"; then
                 $SED "s|^${k}=.*|${k}=${v}|" "$CPIF"
