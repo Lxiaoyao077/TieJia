@@ -2,10 +2,10 @@
 # TieJia uninstall — clean every artifact we created.
 
 MODDIR=${0%/*}
-init_config
 
-# Source common helpers (verify_proc_name)
+# Source common helpers (verify_proc_name) — must come before init_config
 [ -f "$MODDIR/common_func.sh" ] && . "$MODDIR/common_func.sh"
+init_config
 
 # Kill all running module processes
 for proc in TEESimulator supervisor daemon; do

@@ -56,6 +56,7 @@ typedef struct {
     int   launched;
     int   restart_count;
     time_t last_restart;
+    int   restarting;            /* 1 = restart in progress, skip health sweep */
 } Daemon;
 
 /* ---- globals ---- */
@@ -348,8 +349,10 @@ static void monitor_loop(void) {
                             if (delay > BACKOFF_MAX) delay = BACKOFF_MAX;
                             log_msg("restarting '%s' in %ds (attempt %d)",
                                     d->name, delay, d->restart_count + 1);
+                            d->restarting = 1;
                             sleep(delay);
                             launch_daemon(d);
+                            d->restarting = 0;
                         }
                     } else {
                         d->pid = 0;
@@ -365,7 +368,7 @@ static void monitor_loop(void) {
             last_health = now;
             for (int i = 0; i < ndaemons; i++) {
                 Daemon *d = &daemons[i];
-                if (d->pid > 0 && d->launched && d->restart) {
+                if (d->pid > 0 && d->launched && d->restart && !d->restarting) {
                     if (!pid_alive(d->pid)) {
                         log_msg("HEALTH: daemon '%s' (pid=%d) not alive, restarting",
                                 d->name, d->pid);

@@ -20,16 +20,16 @@ TRICKY_DIR="$CONFIG_DIR"
 
 # POSIX-portable "last argument" extraction (${@: -1} is bash-only)
 for last; do :; done
-TGT="${last:-/data/adb/tricky_store/target.txt}"
+TGT="${last:-${TRICKY_DIR}/target.txt}"
 case "$TGT" in
-    --mode) TGT="/data/adb/tricky_store/target.txt" ;;
+    --mode) TGT="${TRICKY_DIR}/target.txt" ;;
     /*) ;;
-    *) TGT="/data/adb/tricky_store/target.txt" ;;
+    *) TGT="${TRICKY_DIR}/target.txt" ;;
 esac
 
 # --- resolve mode: CLI arg > config file > default (auto)
 MODE="auto"
-CFG_MODE="/data/adb/tricky_store/target_mode"
+CFG_MODE="${TRICKY_DIR}/target_mode"
 # Consume --mode <val> in one pass: peek at arg after --mode, set MODE, skip val
 has_explicit_mode=0
 next_is_mode=0
@@ -132,5 +132,5 @@ is_installed() { printf '%s\n' "$ALL" | grep -Fxq "$1"; }
 done | sort -u > "${TGT}.tmp" && mv -f "${TGT}.tmp" "$TGT"
 
 # Persist mode choice so WebUI reads it back
-mkdir -p /data/adb/tricky_store 2>/dev/null
+mkdir -p "$TRICKY_DIR" 2>/dev/null
 printf '%s\n' "$MODE" > "$CFG_MODE" 2>/dev/null

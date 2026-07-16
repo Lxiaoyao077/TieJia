@@ -1,7 +1,7 @@
 #!/system/bin/sh
 # prop_unify.sh — unify ro.product.* props with spoofed fingerprint — TieJia v2.0.0
 #
-# When autopif.sh changes ro.build.fingerprint to a Pixel Canary value,
+# When pif_native_fetch.sh changes ro.build.fingerprint to a Pixel Canary value,
 # the ro.product.* family (ro.product.manufacturer, ro.product.model,
 # ro.product.name, ro.product.device, ro.product.brand) remains as the
 # real device values. This creates a cross-validation gap — banking apps

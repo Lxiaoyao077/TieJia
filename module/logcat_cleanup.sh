@@ -11,6 +11,17 @@ MODDIR="${MODPATH:-$(dirname "$0")}"
 LOG_DIR="$MODDIR/logs"
 mkdir -p "$LOG_DIR" 2>/dev/null
 
+# Guard: prevent multiple instances
+LOCK_FILE="$LOG_DIR/logcat_cleanup.lock"
+if [ -f "$LOCK_FILE" ]; then
+    LOCK_PID=$(cat "$LOCK_FILE" 2>/dev/null)
+    if [ -d "/proc/$LOCK_PID" ]; then
+        # Another instance is already running
+        exit 0
+    fi
+fi
+echo $$ > "$LOCK_FILE"
+
 # Source shared helpers (log_save, find_sed)
 [ -f "$MODDIR/common_func.sh" ] && . "$MODDIR/common_func.sh"
 find_sed 2>/dev/null || { SED="sed -i"; echo "Warning: no busybox sed, falling back to stock sed"; }

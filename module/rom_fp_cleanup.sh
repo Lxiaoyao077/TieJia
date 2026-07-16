@@ -7,8 +7,8 @@ set -e
 MODDIR="${0%/*}"
 . "$MODDIR/common_func.sh"
 
-# Gate: user can disable via /data/adb/tricky_store/no_rom_fp_cleanup
-[ -f /data/adb/tricky_store/no_rom_fp_cleanup ] && exit 0
+# Gate: user can disable via config key daemon_rom_cleanup
+[ "$(config_get_bool daemon_rom_cleanup 0)" = "0" ] && exit 0
 
 cleaned=0
 

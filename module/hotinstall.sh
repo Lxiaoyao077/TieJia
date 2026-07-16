@@ -12,7 +12,7 @@
 # MODPATH before invoking this script.
 
 MODDIR="${0%/*}"
-OLD_MODDIR="${MODDIR}"
+SRC_DIR="${1:-}"
 
 # Source common helpers (verify_proc_name)
 [ -f "$MODDIR/common_func.sh" ] && . "$MODDIR/common_func.sh"
@@ -24,7 +24,11 @@ die() { log "ERROR: $1"; exit 1; }
 # Only works on KSU
 [ "$KSU" != "true" ] && [ "$KSU" != true ] && die "hot install only supported on KernelSU"
 
-MODNAME=$(grep_prop name "${MODDIR}/module.prop" 2>/dev/null)
+# Require a source directory
+[ -z "$SRC_DIR" ] && die "usage: $0 /path/to/new/module/files"
+[ ! -d "$SRC_DIR" ] && die "source directory not found: $SRC_DIR"
+
+MODNAME=$(grep_prop name "${SRC_DIR}/module.prop" 2>/dev/null)
 MODNAME="${MODNAME:-tricky_store}"
 log "hot-installing $MODNAME"
 
@@ -43,14 +47,13 @@ SKIP_PATTERNS="keybox.xml|target.txt|hbk|.bootstrapped|.conflict_state|custom_ke
 
 if [ -d "${MODDIR}" ]; then
   log "copying updated module files..."
-  for f in "${MODDIR}"/*.sh "${MODDIR}"/*.prop "${MODDIR}"/daemon \
-           "${MODDIR}"/supervisor "${MODDIR}"/inject "${MODDIR}"/sepolicy.rule \
-           "${MODDIR}"/webroot "${MODDIR}"/bin "${MODDIR}"/zygisk \
-           "${MODDIR}"/classes.dex "${MODDIR}"/tee_classes.dex \
-           "${MODDIR}"/lib*; do
+  for f in "${SRC_DIR}"/*.sh "${SRC_DIR}"/*.prop "${SRC_DIR}"/daemon \
+           "${SRC_DIR}"/supervisor "${SRC_DIR}"/inject "${SRC_DIR}"/sepolicy.rule \
+           "${SRC_DIR}"/webroot "${SRC_DIR}"/bin "${SRC_DIR}"/zygisk \
+           "${SRC_DIR}"/classes.dex "${SRC_DIR}"/tee_classes.dex \
+           "${SRC_DIR}"/lib*; do
     [ ! -e "$f" ] && continue
-    # use simple name check — config files live under CFG=/data/adb/tricky_store
-    # not under MODDIR, so MODDIR copies are safe (they're just fresh scripts/bins)
+    # copy from SRC_DIR into live MODDIR; skip config files (they live under CFG=/data/adb/tricky_store)
     cp -rf "$f" "${MODDIR}/" 2>/dev/null
   done
 fi

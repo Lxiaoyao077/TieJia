@@ -100,8 +100,8 @@ cat > "$OUT" <<JSONEOF
   "toggles": {
     "auto_fp": $(flag_on fp_auto),
     "auto_keybox": $(flag_on kb_auto),
-    "indicator": $(flag_on indicator_auto),
-    "rom_spoof_block": $(flag_on rom_cleanup_auto),
+    "indicator": $(flag_on daemon_indicator),
+    "rom_spoof_block": $(flag_on daemon_rom_cleanup),
     "custom_keybox": $(flag_present "$CFG/custom_keybox")
   }
 }

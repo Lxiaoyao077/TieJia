@@ -189,7 +189,7 @@ sleep 1
 
 # --- Step 3: Fingerprint ---
 # Three-tier fallback: native crawl (pif_native_fetch.sh, 15s timeout) →
-# autopif4 (10s timeout) → shipped static fingerprints (rotate between 2).
+# pif_native_fetch selective mode (10s timeout) → shipped static fingerprints.
 # Guarantees a fingerprint even with no network at all.
 FP_OK=0
 FP_SRC=""

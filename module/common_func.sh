@@ -433,8 +433,10 @@ config_set() {
   ensure_dir "$(dirname "$cf")"
 
   if [ -f "$cf" ] && grep -qE "^${key}=" "$cf" 2>/dev/null; then
-    # Replace existing key
-    sed -i "s|^${key}=.*|${key}=${val}|" "$cf" 2>/dev/null || {
+    # Replace existing key. Prefer busybox sed (reliable -i); fall back to
+    # stock sed -i with grep -v + mv for toybox compatibility.
+    local _sed="${SED:-sed -i}"
+    $_sed "s|^${key}=.*|${key}=${val}|" "$cf" 2>/dev/null || {
       # Busybox sed fallback
       grep -vE "^${key}=" "$cf" > "${cf}.tmp" 2>/dev/null
       echo "${key}=${val}" >> "${cf}.tmp"

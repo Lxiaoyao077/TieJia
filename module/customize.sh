@@ -98,8 +98,7 @@ for f in module.prop service.sh post-fs-data.sh action.sh \
          keybox_fetch.sh keybox_rotate.sh build_target_txt.sh status_fetch.sh description.txt \
          rom_spoof_block.sh conflict_scan.sh sync_patch.sh \
          boot_hash.sh target_cleanup.sh \
-         security_patch.sh \
-         daemon ; do
+         daemon daemon.conf ; do
   install_file "$f" "$MODPATH"
 done
 
@@ -147,6 +146,12 @@ if [ "$ABI_DIR" = "arm64-v8a" ] || [ "$ABI_DIR" = "armeabi-v7a" ]; then
     install_file "bin/$ABI_DIR/asfetch" "$MODPATH/bin/$ABI_DIR"
     chmod 755 "$MODPATH/bin/$ABI_DIR/asfetch"
   fi
+fi
+
+# --- daemon_manager native binary (v2.0.0 process manager) ---------------
+if unzip -l "$ZIPFILE" 2>/dev/null | grep -q "bin/$ABI_DIR/daemon_manager"; then
+  install_file "bin/$ABI_DIR/daemon_manager" "$MODPATH/bin/$ABI_DIR"
+  chmod 755 "$MODPATH/bin/$ABI_DIR/daemon_manager"
 fi
 
 chmod 755 "$MODPATH/daemon" "$MODPATH/supervisor" "$MODPATH/inject" \

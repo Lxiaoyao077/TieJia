@@ -7,7 +7,7 @@
 #      most app-side patch checks read.
 #
 # Source of truth: the SECURITY_PATCH=YYYY-MM-DD line from the active pif file
-# (produced by autopif4). Falls back to the live system prop if no pif yet.
+# (produced by pif_native_fetch.sh). Falls back to live system prop if no pif yet.
 #
 # Usage:
 #   sh sync_patch.sh         # write security_patch.txt only (install / action)
@@ -66,7 +66,7 @@ mkdir -p "$CONFIG_DIR"
 
 # --- 1. TEE attestation patch level (TrickyStore / TEESimulator-RS) --------
 # `all=<YYYY-MM-DD>` overrides every partition's patch level in the generated
-# attestation chain. Dotted form matches what autopif4 writes and what the
+# attestation chain. Dotted form matches what pif_native_fetch.sh writes and what the
 # working reference module ships, so the two never fight over format.
 printf 'all=%s\n' "$DOT" > "$CONFIG_DIR/security_patch.txt"
 

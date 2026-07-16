@@ -302,6 +302,8 @@ fi
 {
     track_bg
     export MODPATH="$MODDIR"
+    # Phase 2 guard: wait for first-boot bootstrap to finish before first refresh cycle
+    i=0; while [ ! -f "$CONFIG_DIR/.bootstrapped" ] && [ $i -lt 120 ]; do sleep 1; i=$((i+1)); done
     while true; do
         INT=$(config_get fp_interval 3600)
         case "$INT" in
