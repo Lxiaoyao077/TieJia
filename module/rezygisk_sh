@@ -1,0 +1,7 @@
+#!/system/bin/sh
+set -e
+# ReZygisk integrated in TieJia — reset module.prop on boot.
+# Moved to /data/adb/post-fs-data.d/rezygisk.sh on install.
+MODDIR=/data/adb/modules/tricky_store
+cp "$MODDIR/module.prop.bak" "$MODDIR/module.prop"
+exit 0
