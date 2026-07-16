@@ -1,4 +1,15 @@
-## v2.0.1 (201)
+## v2.1.1 (211)
+
+- 全面代码审计修复: 消除重复代码、补充边界条件、增强健壮性
+- device_get/set_prop/del_prop 提取到 common_func.sh，消除 vbmeta_spoof.sh 与 prop_unify.sh 中的重复定义
+- service.sh Phase 1: 移除 17 个重复的 vbmeta 属性设置，改为调用 vbmeta_spoof.sh + prop_unify.sh 统一管理
+- action.sh: 修复 _gevt 未定义 Bug（keybox 菜单在 event0 不可用时崩溃）
+- vbmeta_spoof.sh: 增加 3 个块设备路径（vbmeta_b/platform/vbmeta_system_a），digest 增加长度校验
+- service.sh: Phase 2 $SED toybox 兼容 fallback，hot reload 增加 daemon_hot_reload 配置开关
+- service.sh: Phase 3 增加 device.conf 存在性守卫，防止 bootstrap 失败后空跑
+- common_func.sh: 新增 sed_inplace 便携式行内编辑函数
+
+## v2.1.0 (210)
 
 - 阻断级修复: uninstall.sh source顺序、status_json.sh键名、hotinstall.sh复制目标、update.json版本
 - 中等修复: rom_fp_cleanup.sh config_get_bool、build_target_txt.sh TRICKY_DIR、post-fs-data.sh注释、security_patch.sh安装列表

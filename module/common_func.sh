@@ -7,8 +7,8 @@
 
 # === Global constants ===
 export TIEJIA_CONFIG_DIR=/data/adb/tricky_store
-export TIEJIA_VERSION=2
-export TIEJIA_VERSION_CODE=200
+export TIEJIA_VERSION=2.1.1
+export TIEJIA_VERSION_CODE=211
 
 # === Portable lowercase (busybox awk lacks tolower) ===
 # lowercase <string> — echoes lowercase version using tr.
@@ -358,6 +358,45 @@ require_root() {
 # Create directory (and parents) if missing.
 ensure_dir() { [ -d "$1" ] || mkdir -p "$1" 2>/dev/null; }
 
+#===========================================================================
+# TieJia v2.1.0 — device.conf helpers (single source of truth)
+#===========================================================================
+
+# device_get <key> — read a value from $CONFIG_DIR/device.conf
+device_get() {
+    local key="$1"
+    grep -E "^${key}=" "$CONFIG_DIR/device.conf" 2>/dev/null | tail -1 | cut -d= -f2-
+}
+
+# set_prop <key> <value> — idempotent resetprop -n (no property trigger)
+set_prop() {
+    local key="$1" val="$2" cur
+    cur=$(resetprop "$key" 2>/dev/null || true)
+    [ "$cur" = "$val" ] && return 0
+    resetprop -n "$key" "$val" 2>/dev/null
+}
+
+# del_prop <key> — delete a property if it exists
+del_prop() {
+    resetprop --delete "$1" 2>/dev/null || true
+}
+
+# sed_inplace <sed_expression> <file> — portable in-place sed
+# Falls back to grep -v + mv when toybox sed lacks -i support.
+sed_inplace() {
+    local expr="$1" file="$2"
+    if [ -n "${SED:-}" ]; then
+        $SED "$expr" "$file" 2>/dev/null && return 0
+    fi
+    # toybox sed fallback: extract key, remove old line, append new
+    local k
+    k=$(echo "$expr" | sed 's|s/\^\([^=]*\)=.*|\1|' 2>/dev/null)
+    [ -z "$k" ] && return 1
+    grep -vE "^${k}=" "$file" > "${file}.tmp" 2>/dev/null
+    printf '%s\n' "$(echo "$expr" | sed 's|s/\^\([^=]*\)=\(.*\)/|\1=\2|' 2>/dev/null)" >> "${file}.tmp"
+    mv -f "${file}.tmp" "$file" 2>/dev/null
+}
+
 # --- version_from_module_prop ---
 # Reads versionCode from $MODDIR/module.prop or $1. Echoes it, returns 0.
 version_from_module_prop() {
@@ -383,7 +422,9 @@ kb_auto=1
 kb_interval=3600
 daemon_mount_iso=1
 daemon_proc_obf=1
-daemon_prop_unify=0
+daemon_prop_unify=1
+daemon_vbmeta_spoof=1
+daemon_hot_reload=1
 daemon_boot_hash=1
 daemon_rom_cleanup=1
 daemon_boot_state=1

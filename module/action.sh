@@ -36,6 +36,28 @@ for bb in /data/adb/magisk/busybox /data/adb/ksu/bin/busybox /data/adb/ap/bin/bu
     [ -x "$bb" ] && BB="$bb" && break
 done
 
+# Portable getevent wrapper (shared by all volume-key menus)
+_get_tool() {
+    if command -v timeout >/dev/null 2>&1; then
+        echo "timeout 0.05"
+    elif command -v busybox >/dev/null 2>&1 && busybox timeout --help >/dev/null 2>&1; then
+        echo "busybox timeout 0.05"
+    else
+        echo ""
+    fi
+}
+_TIMEOUT=$(_get_tool)
+_gevt() {
+    if [ -n "$_TIMEOUT" ]; then
+        $_TIMEOUT getevent -lc 1 2>/dev/null || true
+    else
+        getevent -lc 1 2>/dev/null &
+        _pid=$!
+        (sleep 0.05; kill -9 $_pid 2>/dev/null) &
+        wait $_pid 2>/dev/null || true
+    fi
+}
+
 # Proxy support: honor http_proxy / ALL_PROXY env vars (set by user or VPN apps).
 # In GFW environments this is essential for GitHub downloads.
 _pxy_env() {
@@ -89,7 +111,7 @@ if [ -x "$MODPATH/build_target_txt.sh" ]; then
     esac
 
     echo ""
-    echo "    音量 +/- 切换  |  电源键确认  |  8s 超时使用当前"
+    echo "    音量 +/- 切换  |  电源键确认"
     echo "    ─────────────────────────────────"
 
     _render_menu() {
@@ -102,48 +124,26 @@ if [ -x "$MODPATH/build_target_txt.sh" ]; then
     _render_menu
 
     _wait=0; _done=0
-    # Detect available timeout mechanism
-    _get_tool() {
-        if command -v timeout >/dev/null 2>&1; then
-            echo "timeout 1"
-        elif command -v busybox >/dev/null 2>&1 && busybox timeout --help >/dev/null 2>&1; then
-            echo "busybox timeout 1"
-        else
-            echo ""
-        fi
-    }
-    _TIMEOUT=$(_get_tool)
-    # getevent wrapper: 1s timeout, avoid indefinite block
-    _gevt() {
-        if [ -n "$_TIMEOUT" ]; then
-            $_TIMEOUT getevent -lc 1 2>/dev/null
-        else
-            getevent -lc 1 2>/dev/null &
-            _pid=$!
-            (sleep 1; kill -9 $_pid 2>/dev/null) &
-            wait $_pid 2>/dev/null
-        fi
-    }
     # Verify getevent is accessible; skip menu if denied (some kernels block it)
-    if [ -e /dev/input/event0 ] && _gevt >/dev/null 2>&1; then
+    if [ -e /dev/input/event0 ]; then
         # Flush buffered events before entering menu
-        while _gevt >/dev/null 2>&1; do :; done
-        while [ $_wait -lt 80 ]; do
+        while [ -n "$(_gevt)" ]; do :; done
+        while true; do
             _evt=$(_gevt)
             if [ -z "$_evt" ]; then
-                sleep 0.1; _wait=$((_wait + 1))
+                sleep 0.05
                 continue
             fi
-            if echo "$_evt" | grep -q "KEY_VOLUMEUP"; then
+            if echo "$_evt" | grep -q "KEY_VOLUMEUP.*DOWN"; then
                 _idx=$(( (_idx + 1) % 3 ))
                 _render_menu
-            elif echo "$_evt" | grep -q "KEY_VOLUMEDOWN"; then
+            elif echo "$_evt" | grep -q "KEY_VOLUMEDOWN.*DOWN"; then
                 _idx=$(( (_idx - 1 + 3) % 3 ))
                 _render_menu
-            elif echo "$_evt" | grep -q "KEY_POWER"; then
+            elif echo "$_evt" | grep -q "KEY_POWER.*DOWN"; then
                 _done=1; break
             fi
-            sleep 0.1; _wait=$((_wait + 1))
+            sleep 0.05
         done
     else
         _wait=80  # force timeout, use current mode
@@ -180,27 +180,24 @@ elif [ -x "$MODPATH/keybox_fetch.sh" ]; then
     echo ""
     echo "    音量+ → Yurikey"
     echo "    音量- → KOWX712"
-    echo "    8s 无操作 → 自动"
     printf "    等待按键..."
     echo ""
 
     KB_SRC="auto"
-    _wait=0
-    while [ $_wait -lt 80 ]; do
+    # Flush buffered events before entering menu
+    while [ -n "$(_gevt)" ]; do :; done
+    while true; do
         _evt=$(_gevt)
         if [ -z "$_evt" ]; then
-            sleep 0.1; _wait=$((_wait + 1))
-            [ $((_wait % 10)) -eq 0 ] && printf "." 2>/dev/null
+            sleep 0.05
             continue
         fi
-        if echo "$_evt" | grep -q "KEY_VOLUMEUP"; then
+        if echo "$_evt" | grep -q "KEY_VOLUMEUP.*DOWN"; then
             KB_SRC="yurikey"; break
-        elif echo "$_evt" | grep -q "KEY_VOLUMEDOWN"; then
+        elif echo "$_evt" | grep -q "KEY_VOLUMEDOWN.*DOWN"; then
             KB_SRC="upstream"; break
         fi
-        sleep 0.1; _wait=$((_wait + 1))
-        # visual feedback: dot every 1s (10 ticks)
-        [ $((_wait % 10)) -eq 0 ] && printf "." 2>/dev/null
+        sleep 0.05
     done
     echo ""
 
