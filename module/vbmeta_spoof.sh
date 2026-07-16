@@ -114,15 +114,10 @@ set_prop init.svc.adbd                        "stopped"
 
 # ============================================================
 # 9. Build type / tags hardening
+# NOTE: ro.build.type/ro.build.tags are written by prop_unify.sh
+# (→ pif.prop → Zygisk per-process). Skipped here to avoid duplicate
+# global resetprop and reduce "property modified" detection surface.
 # ============================================================
-BT=$(device_get BUILD_TYPE)
-[ -n "$BT" ] && set_prop ro.build.type "$BT"
-
-BTA=$(device_get BUILD_TAGS)
-[ -n "$BTA" ] && {
-    set_prop ro.build.tags "$BTA"
-    set_prop ro.system.build.tags "$BTA"
-}
 
 # ============================================================
 # 10. Boot hash (if boot_hash.sh computed it)
