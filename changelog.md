@@ -1,3 +1,9 @@
+## v2.0.1 (201)
+
+- 阻断级修复: uninstall.sh source顺序、status_json.sh键名、hotinstall.sh复制目标、update.json版本
+- 中等修复: rom_fp_cleanup.sh config_get_bool、build_target_txt.sh TRICKY_DIR、post-fs-data.sh注释、security_patch.sh安装列表
+- 并发修复: daemon_manager.c restarting标志位、service.sh bootstrap守卫、logcat_cleanup.sh PID锁文件
+
 ## v1.4.9
 
 - action.sh: Step 1 改为音量键交互菜单（自动/生成证书链/修改证书链），音量+/-切换，电源键确认
