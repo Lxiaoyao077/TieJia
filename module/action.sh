@@ -184,21 +184,26 @@ elif [ -x "$MODPATH/keybox_fetch.sh" ]; then
     echo ""
 
     KB_SRC="auto"
-    # Flush buffered events before entering menu
-    while [ -n "$(_gevt)" ]; do :; done
-    while true; do
-        _evt=$(_gevt)
-        if [ -z "$_evt" ]; then
+    # Verify getevent is accessible; skip menu if denied (some kernels block it)
+    if [ -e /dev/input/event0 ]; then
+        # Flush buffered events before entering menu
+        while [ -n "$(_gevt)" ]; do :; done
+        while true; do
+            _evt=$(_gevt)
+            if [ -z "$_evt" ]; then
+                sleep 0.05
+                continue
+            fi
+            if echo "$_evt" | grep -q "KEY_VOLUMEUP.*DOWN"; then
+                KB_SRC="yurikey"; break
+            elif echo "$_evt" | grep -q "KEY_VOLUMEDOWN.*DOWN"; then
+                KB_SRC="upstream"; break
+            fi
             sleep 0.05
-            continue
-        fi
-        if echo "$_evt" | grep -q "KEY_VOLUMEUP.*DOWN"; then
-            KB_SRC="yurikey"; break
-        elif echo "$_evt" | grep -q "KEY_VOLUMEDOWN.*DOWN"; then
-            KB_SRC="upstream"; break
-        fi
-        sleep 0.05
-    done
+        done
+    else
+        row "ℹ️" "  事件设备不可用 — 使用自动选择"
+    fi
     echo ""
 
     row "⌛" "下载密钥中 (${KB_SRC})..."
@@ -276,8 +281,7 @@ sleep 1
 for f in "$MODPATH/custom.pif.prop" "$MODPATH/pif.prop" \
          "$CONFIG_DIR/custom.pif.prop" "$CONFIG_DIR/pif.prop"; do
     [ -f "$f" ] || continue
-    for kv in spoofProvider=0 spoofVendingFinger=1 spoofBuild=1 \
-              spoofProps=1 spoofSignature=0 spoofVendingSdk=0; do
+    for kv in $SPOOF_SETTINGS; do
         k="${kv%=*}"; v="${kv#*=}"
         if grep -qE "^${k}=" "$f"; then
             $SED "s|^${k}=.*|${k}=${v}|" "$f"
@@ -330,31 +334,36 @@ if [ -x "$MODPATH/prop_unify.sh" ]; then
     }
 
     _apm_render
-    # Flush buffered events before entering menu
-    while [ -n "$(_gevt)" ]; do :; done
-    while true; do
-        _evt=$(_gevt)
-        if [ -z "$_evt" ]; then
+    if [ -e /dev/input/event0 ]; then
+        # Flush buffered events before entering menu
+        while [ -n "$(_gevt)" ]; do :; done
+        while true; do
+            _evt=$(_gevt)
+            if [ -z "$_evt" ]; then
+                sleep 0.05
+                continue
+            fi
+            if echo "$_evt" | grep -q "KEY_VOLUMEUP.*DOWN"; then
+                _pmi=$(( (_pmi + 1) % 2 ))
+                _apm_render
+            elif echo "$_evt" | grep -q "KEY_VOLUMEDOWN.*DOWN"; then
+                _pmi=$(( (_pmi - 1 + 2) % 2 ))
+                _apm_render
+            elif echo "$_evt" | grep -q "KEY_POWER.*DOWN"; then
+                break
+            fi
             sleep 0.05
-            continue
-        fi
-        if echo "$_evt" | grep -q "KEY_VOLUMEUP.*DOWN"; then
-            _pmi=$(( (_pmi + 1) % 2 ))
-            _apm_render
-        elif echo "$_evt" | grep -q "KEY_VOLUMEDOWN.*DOWN"; then
-            _pmi=$(( (_pmi - 1 + 2) % 2 ))
-            _apm_render
-        elif echo "$_evt" | grep -q "KEY_POWER.*DOWN"; then
-            break
-        fi
-        sleep 0.05
-    done
-    echo ""
+        done
+        echo ""
 
-    case $_pmi in
-        0) PM="zygisk_only" ;;
-        1) PM="global" ;;
-    esac
+        case $_pmi in
+            0) PM="zygisk_only" ;;
+            1) PM="global" ;;
+        esac
+    else
+        echo ""
+        row "ℹ️" "事件设备不可用 — 保持当前模式"
+    fi
     config_set prop_mode "$PM"
     row "⚙️" "prop_mode = $PM"
     if [ "$PM" = "global" ]; then
