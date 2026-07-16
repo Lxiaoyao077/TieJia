@@ -206,8 +206,8 @@ fi
         if [ -x "$MODDIR/mount_isolation.sh" ]; then
             { sleep 30; MODPATH="$MODDIR" sh "$MODDIR/mount_isolation.sh" >/dev/null 2>&1 & track_bg; } &
         fi
-        # Prop unify
-        if [ -x "$MODDIR/prop_unify.sh" ]; then
+        # Prop unify (config-gated, default on; set daemon_prop_unify=0 to disable)
+        if [ -x "$MODDIR/prop_unify.sh" ] && config_get_bool "daemon_prop_unify" 1; then
             { sleep 40; MODPATH="$MODDIR" sh "$MODDIR/prop_unify.sh" >/dev/null 2>&1 & track_bg; } &
         fi
         # VBMeta digest
