@@ -71,54 +71,49 @@ fi
 
 log "device → brand=$BRAND product=$PRODUCT device=$DEVICE model=$MODEL"
 
-# Apply manufacturer
-[ -n "$MANUFACTURER" ] && set_prop ro.product.manufacturer "$MANUFACTURER"
+# --- prop_mode gate ---
+# prop_mode=zygisk_only (default): write only pif.prop, skip global resetprop.
+#   The Zygisk module reads pif.prop (spoofProps=true, spoofBuild=true) and applies
+#   per-process property spoofing only to GMS/Play Store. Global resetprop would
+#   mutate the system property store and create a "property modified" detection
+#   surface visible to all apps via getprop or /dev/__properties__ snapshots.
+# prop_mode=global: legacy mode - also write props globally via resetprop.
+PROP_MODE=$(config_get prop_mode zygisk_only)
+log "prop_mode=$PROP_MODE"
 
-# Apply brand
-[ -n "$BRAND" ] && set_prop ro.product.brand "$BRAND"
-
-# Apply product name
-[ -n "$PRODUCT" ] && {
-  set_prop ro.product.name "$PRODUCT"
-  set_prop ro.product.device "$PRODUCT"
-  set_prop ro.build.product "$PRODUCT"
-}
-
-# Apply device (if different from product)
-[ -n "$DEVICE" ] && [ "$DEVICE" != "$PRODUCT" ] && {
-  set_prop ro.product.device "$DEVICE"
-}
-
-# Apply model
-if [ -n "$MODEL" ]; then
-  set_prop ro.product.model "$MODEL"
-  set_prop ro.product.system.model "$MODEL"
-fi
-
-# Apply build description
-if [ -n "$BUILD_DESC" ]; then
-  set_prop ro.build.description "$BUILD_DESC"
-fi
-
-# Security patch
-[ -n "$SECURITY_PATCH" ] && {
-  set_prop ro.build.version.security_patch "$SECURITY_PATCH"
-  set_prop ro.vendor.build.security_patch "$SECURITY_PATCH"
-  set_prop ro.build.version.real_security_patch "$SECURITY_PATCH"
-}
-
-# Scrub OEM-specific props
-for _pfx in odm vendor product system_ext; do
-  for _prop in model brand manufacturer device name; do
-    del_prop "ro.product.${_pfx}.${_prop}" 2>/dev/null
+_apply_props() {
+  local _mode="$1"
+  [ "$_mode" = "zygisk_only" ] && return 0
+  log "global mode: writing product/build props to global property store"
+  [ -n "$MANUFACTURER" ] && set_prop ro.product.manufacturer "$MANUFACTURER"
+  [ -n "$BRAND" ] && set_prop ro.product.brand "$BRAND"
+  [ -n "$PRODUCT" ] && {
+    set_prop ro.product.name "$PRODUCT"
+    set_prop ro.product.device "$PRODUCT"
+    set_prop ro.build.product "$PRODUCT"
+  }
+  [ -n "$DEVICE" ] && [ "$DEVICE" != "$PRODUCT" ] && set_prop ro.product.device "$DEVICE"
+  if [ -n "$MODEL" ]; then
+    set_prop ro.product.model "$MODEL"
+    set_prop ro.product.system.model "$MODEL"
+  fi
+  [ -n "$BUILD_DESC" ] && set_prop ro.build.description "$BUILD_DESC"
+  if [ -n "$SECURITY_PATCH" ]; then
+    set_prop ro.build.version.security_patch "$SECURITY_PATCH"
+    set_prop ro.vendor.build.security_patch "$SECURITY_PATCH"
+    set_prop ro.build.version.real_security_patch "$SECURITY_PATCH"
+  fi
+  for _pfx in odm vendor product system_ext; do
+    for _prop in model brand manufacturer device name; do
+      del_prop "ro.product.${_pfx}.${_prop}" 2>/dev/null
+    done
   done
-done
-
-# Build tags / type
-set_prop ro.build.tags "$BUILD_TAGS"
-set_prop ro.build.type "$BUILD_TYPE"
-set_prop ro.system.build.tags "$BUILD_TAGS"
-set_prop ro.system.build.type "$BUILD_TYPE"
+  set_prop ro.build.type "$BUILD_TYPE"
+  set_prop ro.build.tags "$BUILD_TAGS"
+  set_prop ro.system.build.tags "$BUILD_TAGS"
+  set_prop ro.system.build.type "$BUILD_TYPE"
+}
+_apply_props "$PROP_MODE"
 
 # Sync to pif.prop for PIF Zygisk module
 if [ -d "$(dirname "$PIF_PROP")" ]; then
