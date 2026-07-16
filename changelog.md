@@ -1,12 +1,10 @@
-## v2.3.0
+## v2.3.1
 
-- 修复 ReZygisk 无法启动：二进制硬编码 /data/adb/modules/rezygisk/ 路径，安装时自动创建 compat stub 目录（symlink）
-- 修复 uninstall.sh 未清理 rezygisk compat 目录
+- ReZygisk 真正集成：runtime symlink（不产生额外 Magisk 模块）
+- WebUI 路径指回 tricky_store（module.prop / lang 不再依赖 rezygisk）
+- 清理 v2.3.0 的 compat stub 残留逻辑
 
 ## v2.2.2
 
 - 修复 WebUI 空白问题：customize.sh 现在提取完整 webroot 目录（CSS/JS/fonts/assets/lang 共 72 个文件），之前只提取了 index.html
-
-## v2.2.1
-
-- 初始云端发布
+- ReZygisk 集成保持与 integrated_v2 一致
