@@ -7,8 +7,15 @@
 
 # === Global constants ===
 export TIEJIA_CONFIG_DIR=/data/adb/tricky_store
-export TIEJIA_VERSION=2.1.3
-export TIEJIA_VERSION_CODE=213
+export TIEJIA_VERSION=2.1.4
+export TIEJIA_VERSION_CODE=214
+
+# === PIF spoof settings (single source of truth) ===
+# Default set applied to every pif.prop (custom or shipped) before
+# Zygisk per-process injection. Tuned for minimum detection surface:
+# spoofProvider/Signature/VendingSdk off (high false-positive risk),
+# spoofBuild/Props/VendingFinger on (required for DEVICE verdict).
+export SPOOF_SETTINGS="spoofProvider=0 spoofVendingFinger=1 spoofBuild=1 spoofProps=1 spoofSignature=0 spoofVendingSdk=0"
 
 # === Portable lowercase (busybox awk lacks tolower) ===
 # lowercase <string> — echoes lowercase version using tr.
