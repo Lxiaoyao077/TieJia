@@ -102,10 +102,38 @@ if [ -x "$MODPATH/build_target_txt.sh" ]; then
     _render_menu
 
     _wait=0; _done=0
+    # Detect available timeout mechanism
+    _get_tool() {
+        if command -v timeout >/dev/null 2>&1; then
+            echo "timeout 1"
+        elif command -v busybox >/dev/null 2>&1 && busybox timeout --help >/dev/null 2>&1; then
+            echo "busybox timeout 1"
+        else
+            echo ""
+        fi
+    }
+    _TIMEOUT=$(_get_tool)
+    # getevent wrapper: 1s timeout, avoid indefinite block
+    _gevt() {
+        if [ -n "$_TIMEOUT" ]; then
+            $_TIMEOUT getevent -lc 1 2>/dev/null
+        else
+            getevent -lc 1 2>/dev/null &
+            _pid=$!
+            (sleep 1; kill -9 $_pid 2>/dev/null) &
+            wait $_pid 2>/dev/null
+        fi
+    }
     # Verify getevent is accessible; skip menu if denied (some kernels block it)
-    if [ -e /dev/input/event0 ] && getevent -lc 1 /dev/input/event0 >/dev/null 2>&1; then
+    if [ -e /dev/input/event0 ] && _gevt >/dev/null 2>&1; then
+        # Flush buffered events before entering menu
+        while _gevt >/dev/null 2>&1; do :; done
         while [ $_wait -lt 80 ]; do
-            _evt=$(getevent -lc 1 2>/dev/null)
+            _evt=$(_gevt)
+            if [ -z "$_evt" ]; then
+                sleep 0.1; _wait=$((_wait + 1))
+                continue
+            fi
             if echo "$_evt" | grep -q "KEY_VOLUMEUP"; then
                 _idx=$(( (_idx + 1) % 3 ))
                 _render_menu
@@ -159,7 +187,12 @@ elif [ -x "$MODPATH/keybox_fetch.sh" ]; then
     KB_SRC="auto"
     _wait=0
     while [ $_wait -lt 80 ]; do
-        _evt=$(getevent -lc 1 2>/dev/null)
+        _evt=$(_gevt)
+        if [ -z "$_evt" ]; then
+            sleep 0.1; _wait=$((_wait + 1))
+            [ $((_wait % 10)) -eq 0 ] && printf "." 2>/dev/null
+            continue
+        fi
         if echo "$_evt" | grep -q "KEY_VOLUMEUP"; then
             KB_SRC="yurikey"; break
         elif echo "$_evt" | grep -q "KEY_VOLUMEDOWN"; then
