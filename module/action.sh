@@ -310,6 +310,58 @@ sleep 1
 row "📱" "${MD:-unknown}"
 sleep 1
 
+# --- Step 6: prop_mode toggle ---
+# Allow switching between zygisk_only (per-process via pif.prop, default)
+# and global (legacy resetprop on all processes, larger detection surface).
+if [ -x "$MODPATH/prop_unify.sh" ]; then
+    PM=$(config_get prop_mode zygisk_only)
+    case "$PM" in
+        global) _pmi=1 ;;
+        *)      _pmi=0; PM="zygisk_only" ;;
+    esac
+
+    echo ""
+    echo "    音量 +/- 切换  |  电源键确认"
+    echo "    ─────────────────────────────────"
+    _apm_render() {
+        printf "\033[2A\r" 2>/dev/null
+        [ 0 -eq $_pmi ] && echo "    ▶ zygisk_only  仅按进程注入 (推荐)" || echo "       zygisk_only  仅按进程注入 (推荐)"
+        [ 1 -eq $_pmi ] && echo "    ▶ global        全局 resetprop (旧行为)" || echo "       global        全局 resetprop (旧行为)"
+    }
+
+    _apm_render
+    # Flush buffered events before entering menu
+    while [ -n "$(_gevt)" ]; do :; done
+    while true; do
+        _evt=$(_gevt)
+        if [ -z "$_evt" ]; then
+            sleep 0.05
+            continue
+        fi
+        if echo "$_evt" | grep -q "KEY_VOLUMEUP.*DOWN"; then
+            _pmi=$(( (_pmi + 1) % 2 ))
+            _apm_render
+        elif echo "$_evt" | grep -q "KEY_VOLUMEDOWN.*DOWN"; then
+            _pmi=$(( (_pmi - 1 + 2) % 2 ))
+            _apm_render
+        elif echo "$_evt" | grep -q "KEY_POWER.*DOWN"; then
+            break
+        fi
+        sleep 0.05
+    done
+    echo ""
+
+    case $_pmi in
+        0) PM="zygisk_only" ;;
+        1) PM="global" ;;
+    esac
+    config_set prop_mode "$PM"
+    row "⚙️" "prop_mode = $PM"
+    if [ "$PM" = "global" ]; then
+        row "ℹ️" "全局模式增加检测面，建议完成后切回 zygisk_only"
+    fi
+fi
+
 # --- Restart PI + status ---
 killall -9 com.google.android.gms.unstable 2>/dev/null
 killall -9 com.android.vending 2>/dev/null

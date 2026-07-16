@@ -7,8 +7,8 @@
 
 # === Global constants ===
 export TIEJIA_CONFIG_DIR=/data/adb/tricky_store
-export TIEJIA_VERSION=2.1.2
-export TIEJIA_VERSION_CODE=212
+export TIEJIA_VERSION=2.1.3
+export TIEJIA_VERSION_CODE=213
 
 # === Portable lowercase (busybox awk lacks tolower) ===
 # lowercase <string> — echoes lowercase version using tr.
@@ -429,6 +429,7 @@ prop_mode=zygisk_only
 daemon_boot_hash=1
 daemon_rom_cleanup=1
 daemon_boot_state=1
+daemon_oem_unlock_hide=1
 security_dmesg=1
 security_se=1
 log_level=info

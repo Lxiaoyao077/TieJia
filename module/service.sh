@@ -87,7 +87,12 @@ fi
     resetprop_if_diff ro.boot.veritymode enforcing
     resetprop_if_diff vendor.boot.veritymode enforcing
     resetprop_if_diff vendor.boot.vbmeta.device_state locked
-    resetprop_if_diff sys.oem_unlock_allowed 0
+    # sys.oem_unlock_allowed=0 contradicts actual unlocked state on custom-modded
+    # devices; may trigger TEE integrity checks. Gate: set daemon_oem_unlock_hide=0
+    # to skip this property if TEE conflicts arise.
+    if config_get_bool "daemon_oem_unlock_hide" 1; then
+        resetprop_if_diff sys.oem_unlock_allowed 0
+    fi
     resetprop_if_diff ro.boot.warranty_bit 0
     resetprop_if_diff ro.warranty_bit 0
     resetprop_if_diff ro.secure 1
@@ -234,6 +239,11 @@ fi
 # --- Touch-file hot reload monitor ---
 # Touch /data/adb/tricky_store/.reload to re-apply device.conf without reboot.
 # Gated by daemon_hot_reload config key (default: enabled).
+# NOTE: prop_unify.sh reads prop_mode from config on every invocation, so a
+# prop_mode switch (global↔zygisk_only) takes effect on next reload. However,
+# switching global→zygisk_only leaves previously-set global props in place
+# (Zygisk only injects on processes it can reach); for a clean transition,
+# reboot after changing prop_mode.
 if config_get_bool "daemon_hot_reload" 1; then
 {
     RELOAD_FILE="$CONFIG_DIR/.reload"

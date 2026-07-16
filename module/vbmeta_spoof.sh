@@ -98,12 +98,20 @@ CS=$(device_get CRYPTO_STATE)
 
 # ============================================================
 # 7. OEM unlock
+# sys.oem_unlock_allowed is gated by daemon_oem_unlock_hide config
+# (default 1) — see service.sh for the TEE conflict rationale.
+# ro.boot.oem_unlock_supported is harmless and always set.
 # ============================================================
-set_prop sys.oem_unlock_allowed               "0"
+if config_get_bool "daemon_oem_unlock_hide" 1; then
+    set_prop sys.oem_unlock_allowed           "0"
+fi
 set_prop ro.boot.oem_unlock_supported         "0"
 
 # ============================================================
 # 8. Secure / ADB concealment
+# NOTE: Also set in service.sh Phase 1 (runs earlier). Kept here as
+# defensive fallback for daemon-managed hot reload scenarios where
+# Phase 1 has already completed.
 # ============================================================
 set_prop ro.secure                            "1"
 set_prop ro.adb.secure                        "1"
@@ -120,15 +128,7 @@ set_prop init.svc.adbd                        "stopped"
 # ============================================================
 
 # ============================================================
-# 10. Boot hash (if boot_hash.sh computed it)
-# ============================================================
-if [ -f "$CONFIG_DIR/boot_hash" ]; then
-    BH=$(cat "$CONFIG_DIR/boot_hash" 2>/dev/null)
-    [ -n "$BH" ] && set_prop ro.boot.vbmeta.digest "$BH"
-fi
-
-# ============================================================
-# 11. Generic vbmeta integrity markers
+# 10. Generic vbmeta integrity markers
 # ============================================================
 set_prop ro.boot.vbmeta.invalidate_on_error   "yes"
 set_prop ro.boot.avb_version                  "${AVB:-2.0}"
