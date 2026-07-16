@@ -11,25 +11,6 @@ init_config
 DEVICE_CONF="$CONFIG_DIR/device.conf"
 LOG_TAG="TieJia-vbmeta"
 
-# --- config reader for device.conf ---
-device_get() {
-    local key="$1"
-    grep -E "^${key}=" "$DEVICE_CONF" 2>/dev/null | tail -1 | cut -d= -f2-
-}
-
-# --- resetprop with -n (no trigger) ---
-set_prop() {
-    local key="$1" val="$2"
-    local cur
-    cur=$(resetprop "$key" 2>/dev/null || true)
-    [ "$cur" = "$val" ] && return 0
-    resetprop -n "$key" "$val" 2>/dev/null
-}
-
-del_prop() {
-    resetprop --delete "$1" 2>/dev/null || true
-}
-
 # ============================================================
 # 1. Verified boot state (green = locked/verified)
 # ============================================================
